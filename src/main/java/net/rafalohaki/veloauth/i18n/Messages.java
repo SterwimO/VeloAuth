@@ -163,7 +163,7 @@ public class Messages {
         
         try (InputStream inputStream = getClass().getClassLoader().getResourceAsStream(fileName)) {
             if (inputStream != null) {
-                properties.load(inputStream);
+                properties.load(new java.io.InputStreamReader(inputStream, java.nio.charset.StandardCharsets.UTF_8));
                 logger.debug("Loaded {} messages from file: {}", properties.size(), fileName);
             } else {
                 logger.error("Could not find language file: {}", fileName);
