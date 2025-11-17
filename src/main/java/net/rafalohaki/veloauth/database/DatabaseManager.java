@@ -243,11 +243,11 @@ public class DatabaseManager {
             lastHealthCheckPassed = healthy;
             
             if (!healthy) {
-                logger.warn(DB_MARKER, "❌ Database health check FAILED - connection may be unstable");
+                logger.warn(DB_MARKER, "\u274C Database health check FAILED - connection may be unstable");
                 // Don't set connected=false for single health check failure
                 // Only log warning - HikariCP will handle connection recovery
             } else {
-                logger.debug(DB_MARKER, "✅ Database health check PASSED");
+                logger.debug(DB_MARKER, "\u2705 Database health check PASSED");
             }
             
         } catch (Exception e) {

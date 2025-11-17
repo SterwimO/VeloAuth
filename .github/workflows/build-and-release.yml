@@ -49,41 +49,25 @@ jobs:
         else
           VERSION="latest-$(date +%Y%m%d-%H%M%S)"
         fi
-        echo "## VeloAuth $VERSION" > release_notes.md
-        echo "" >> release_notes.md
-        echo "### Installation" >> release_notes.md
-        echo '```bash' >> release_notes.md
-        echo "wget https://github.com/${{ github.repository }}/releases/download/$VERSION/veloauth-$VERSION.jar" >> release_notes.md
-        echo "# Place the JAR file in your Velocity proxy plugins directory" >> release_notes.md
-        echo "# Restart your Velocity proxy" >> release_notes.md
-        echo '```' >> release_notes.md
-        echo "" >> release_notes.md
-        echo "### Requirements" >> release_notes.md
-        echo "- Java 21+" >> release_notes.md
-        echo "- Velocity proxy server" >> release_notes.md
-        echo "- PostgreSQL database (recommended) or MySQL/SQLite" >> release_notes.md
-        echo "" >> release_notes.md
-        echo "### Features" >> release_notes.md
-        echo "- 🔒 Fail-secure database operations" >> release_notes.md
-        echo "- 🛡️ Database bypass vulnerability protection" >> release_notes.md
-        echo "- 📊 Database health monitoring" >> release_notes.md
-        echo "- 🔐 BCrypt password hashing" >> release_notes.md
-        echo "- ⚡ Virtual Thread support for Java 21+" >> release_notes.md
-        echo "- 🎯 UUID verification and session management" >> release_notes.md
-        echo "- 📝 Comprehensive logging and security events" >> release_notes.md
-        echo "" >> release_notes.md
-        echo "### Security Fixes in This Release" >> release_notes.md
-        echo "- Database connection failures now deny access (fail-secure)" >> release_notes.md
-        echo "- UUID verification race condition resolved" >> release_notes.md
-        echo "- Database health checks with automatic monitoring" >> release_notes.md
-        echo "- Session cache invalidation on database errors" >> release_notes.md
-        echo "" >> release_notes.md
-        echo "### Configuration" >> release_notes.md
-        echo "Configure your database connection in `plugins/VeloAuth/config.yml`" >> release_notes.md
-        echo "" >> release_notes.md
-        echo "### Support" >> release_notes.md
-        echo "- Issues: https://github.com/${{ github.repository }}/issues" >> release_notes.md
-        echo "- Documentation: Check the in-plugin commands `/vauth help`"
+        
+        # Get changelog from git commits since last tag
+        LAST_TAG=$(git describe --tags --abbrev=0 2>/dev/null || echo "")
+        if [ -n "$LAST_TAG" ]; then
+          CHANGELOG=$(git log $LAST_TAG..HEAD --pretty=format:"- %s" | head -20)
+        else
+          CHANGELOG=$(git log --pretty=format:"- %s" | head -20)
+        fi
+        
+        # If no commits, use default message
+        if [ -z "$CHANGELOG" ]; then
+          CHANGELOG="- Initial release or maintenance update"
+        fi
+        
+        # Replace template variables
+        sed "s/{{VERSION}}/$VERSION/g" .github/RELEASE_TEMPLATE.md | \
+        sed "s/{{CHANGELOG}}/$CHANGELOG/g" > release_notes.md
+        
+        echo "Generated release notes for version: $VERSION"
         
     - name: Upload release notes
       if: github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master' || startsWith(github.ref, 'refs/tags/')

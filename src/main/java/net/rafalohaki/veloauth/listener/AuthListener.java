@@ -105,7 +105,7 @@ public class AuthListener {
     @Subscribe(priority = 100)
     public void onPreLogin(PreLoginEvent event) {
         String username = event.getUsername();
-        logger.info("🔍 PreLogin: {}", username);
+        logger.info("\uD83D\uDD0D PreLogin: {}", username);
 
         // WALIDACJA USERNAME - sprawdź format przed cokolwiek innego
         if (!isValidUsername(username)) {
@@ -302,7 +302,7 @@ public class AuthListener {
             }
 
             if (authCache.isPlayerAuthorized(player.getUniqueId(), playerIp)) {
-                logger.info(AUTH_MARKER, "✅ Gracz {} jest już autoryzowany - pozostaje na backendzie",
+                logger.info(AUTH_MARKER, "\u2705 Gracz {} jest już autoryzowany - pozostaje na backendzie",
                         player.getUsername());
                 return;
             }
@@ -318,7 +318,7 @@ public class AuthListener {
                         logger.info(messages.get("player.transfer.success"),
                                 player.getUsername());
                     } else {
-                        logger.error("❌ Błąd podczas przenoszenia gracza {} na PicoLimbo",
+                        logger.error("\u274C Błąd podczas przenoszenia gracza {} na PicoLimbo",
                                 player.getUsername());
 
                         player.disconnect(Component.text(
@@ -420,7 +420,7 @@ public class AuthListener {
             }
 
             // ✅ WSZYSTKIE WERYFIKACJE PRZESZŁY - POZWÓL
-            logger.debug("✅ Autoryzowany gracz {} idzie na {} (sesja: OK, UUID: OK)",
+            logger.debug("\u2705 Autoryzowany gracz {} idzie na {} (sesja: OK, UUID: OK)",
                     player.getUsername(), targetServerName);
 
         } catch (Exception e) {
