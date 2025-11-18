@@ -121,3 +121,4 @@ sonarqube_mcp_instructions.mdc
 .windsurf/workflows/*
 connectedMode.json
 refactor/*
+.trae/*

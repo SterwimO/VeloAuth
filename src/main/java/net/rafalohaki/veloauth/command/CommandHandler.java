@@ -51,6 +51,7 @@ public class CommandHandler {
     private final Settings settings;
     private final Messages messages;
     private final Logger logger;
+    private final net.rafalohaki.veloauth.i18n.SimpleMessages sm;
 
     /**
      * IP-based rate limiting - uses dedicated IPRateLimiter class.
@@ -75,6 +76,7 @@ public class CommandHandler {
         this.messages = messages;
         this.logger = plugin.getLogger();
         this.ipRateLimiter = new IPRateLimiter(10, 5); // 10 attempts per 5 minutes
+        this.sm = new net.rafalohaki.veloauth.i18n.SimpleMessages(messages);
     }
 
     /**
@@ -167,7 +169,7 @@ public class CommandHandler {
             if (logger.isErrorEnabled()) {
                 logger.error(SECURITY_MARKER, "[DATABASE ERROR] {} failed for {}: {}", operation, player.getUsername(), premiumResult.getErrorMessage());
             }
-            player.sendMessage(ValidationUtils.createErrorComponent(messages.get(ERROR_DATABASE_QUERY)));
+            player.sendMessage(sm.errorDatabase());
         }
 
         return premiumResult;
@@ -186,7 +188,7 @@ public class CommandHandler {
             if (logger.isErrorEnabled()) {
                 logger.error(SECURITY_MARKER, "[DATABASE ERROR] {} failed for {}: {}", operation, player.getUsername(), result.getErrorMessage());
             }
-            player.sendMessage(ValidationUtils.createErrorComponent(messages.get(ERROR_DATABASE_QUERY)));
+            player.sendMessage(sm.errorDatabase());
             return true;
         }
         return false;
@@ -211,7 +213,7 @@ public class CommandHandler {
             String[] args = invocation.arguments();
 
             if (args.length != 1) {
-                CommandHelper.sendError(source, messages, "auth.login.usage");
+                source.sendMessage(sm.usageLogin());
                 return;
             }
 
@@ -271,7 +273,7 @@ public class CommandHandler {
                 authCache.startSession(authContext.player.getUniqueId(), authContext.username, ValidationUtils.getPlayerIp(authContext.player));
                 resetSecurityCounters(authContext.playerAddress);
 
-                authContext.player.sendMessage(ValidationUtils.createSuccessComponent(messages.get("auth.login.success")));
+                authContext.player.sendMessage(sm.loginSuccess());
                 if (logger.isInfoEnabled()) {
                     logger.info(AUTH_MARKER, "Gracz {} zalogował się pomyślnie z IP {} - sesja rozpoczęta",
                             authContext.username, ValidationUtils.getPlayerIp(authContext.player));
@@ -300,7 +302,7 @@ public class CommandHandler {
                             authContext.username, ValidationUtils.getPlayerIp(authContext.player));
                 }
             } else {
-                authContext.player.sendMessage(ValidationUtils.createErrorComponent(messages.get("auth.login.incorrect_password")));
+                authContext.player.sendMessage(sm.loginFailed());
                 if (logger.isDebugEnabled()) {
                     logger.debug("Nieudana próba logowania gracza {} z IP {}",
                             authContext.username, ValidationUtils.getPlayerIp(authContext.player));
@@ -408,7 +410,7 @@ public class CommandHandler {
             // Reset security counters on success
             resetSecurityCounters(authContext.playerAddress);
 
-            authContext.player.sendMessage(ValidationUtils.createSuccessComponent(messages.get("auth.register.success")));
+            authContext.player.sendMessage(sm.registerSuccess());
             if (logger.isInfoEnabled()) {
                 logger.info(AUTH_MARKER, "Gracz {} zarejestrowany pomyślnie z IP {}",
                         authContext.username, ValidationUtils.getPlayerIp(authContext.player));
@@ -766,11 +768,11 @@ public class CommandHandler {
         }
 
         private void sendAdminHelp(CommandSource source) {
-            CommandHelper.sendWarning(source, "=== VeloAuth Admin ===");
-            CommandHelper.sendWarning(source, "/vauth reload - Reload configuration");
-            CommandHelper.sendWarning(source, "/vauth cache-reset [player] - Clear cache");
-            CommandHelper.sendWarning(source, "/vauth stats - Show statistics");
-            CommandHelper.sendWarning(source, "/vauth conflicts - List nickname conflicts");
+            source.sendMessage(net.kyori.adventure.text.Component.text("=== VeloAuth Admin ===", net.kyori.adventure.text.format.NamedTextColor.YELLOW));
+            source.sendMessage(net.kyori.adventure.text.Component.text("/vauth reload - Reload configuration", net.kyori.adventure.text.format.NamedTextColor.YELLOW));
+            source.sendMessage(net.kyori.adventure.text.Component.text("/vauth cache-reset [player] - Clear cache", net.kyori.adventure.text.format.NamedTextColor.YELLOW));
+            source.sendMessage(net.kyori.adventure.text.Component.text("/vauth stats - Show statistics", net.kyori.adventure.text.format.NamedTextColor.YELLOW));
+            source.sendMessage(net.kyori.adventure.text.Component.text("/vauth conflicts - List nickname conflicts", net.kyori.adventure.text.format.NamedTextColor.YELLOW));
         }
 
         @Override
