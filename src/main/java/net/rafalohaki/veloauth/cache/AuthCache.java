@@ -503,7 +503,9 @@ public class AuthCache {
                 bruteForceAttempts.clear();
                 premiumCache.clear();
                 activeSessions.clear();
-                logger.info(messages.get("cache.all_cleared"));
+                if (logger.isInfoEnabled()) {
+                    logger.info(messages.get("cache.all_cleared"));
+                }
 
             } finally {
                 cacheLock.unlock();
@@ -807,13 +809,17 @@ public class AuthCache {
             }
 
             clearAll();
-            logger.info(messages.get("cache.shutdown"));
+            if (logger.isInfoEnabled()) {
+                logger.info(messages.get("cache.shutdown"));
+            }
 
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
             cleanupScheduler.shutdownNow();
             metricsScheduler.shutdownNow();
-            logger.warn(messages.get("cache.interrupted_shutdown"));
+            if (logger.isWarnEnabled()) {
+                logger.warn(messages.get("cache.interrupted_shutdown"));
+            }
         }
     }
 

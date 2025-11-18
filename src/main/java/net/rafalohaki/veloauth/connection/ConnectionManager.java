@@ -492,7 +492,9 @@ public class ConnectionManager {
      * Wyświetla wszystkie zarejestrowane serwery i sprawdza konfigurację PicoLimbo.
      */
     public void debugServers() {
-        logger.info(messages.get("connection.servers.available"));
+        if (logger.isInfoEnabled()) {
+            logger.info(messages.get("connection.servers.available"));
+        }
         plugin.getServer().getAllServers().forEach(server -> {
             String name = server.getServerInfo().getName();
             String address = server.getServerInfo().getAddress().toString();
