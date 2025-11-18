@@ -16,6 +16,9 @@ import java.util.concurrent.CompletableFuture;
  */
 public final class AuthenticationHelper {
 
+    // Stałe dla wiadomości
+    private static final String PLAYER_NOT_FOUND = "player.not.found";
+
     private AuthenticationHelper() {
         // Utility class - prevent instantiation
     }
@@ -146,7 +149,7 @@ public final class AuthenticationHelper {
                 RegisteredPlayer registeredPlayer = playerResult.getValue();
                 if (registeredPlayer == null) {
                     if (logger.isDebugEnabled()) {
-                        logger.debug(dbMarker, messages.get("player.not.found"), username);
+                        logger.debug(dbMarker, messages.get(PLAYER_NOT_FOUND), username);
                     }
                     return null;
                 }
@@ -191,7 +194,7 @@ public final class AuthenticationHelper {
 
                 RegisteredPlayer registeredPlayer = playerResult.getValue();
                 if (registeredPlayer == null) {
-                    context.logger().debug(context.dbMarker(), context.messages().get("player.not.found"), context.username());
+                    context.logger().debug(context.dbMarker(), context.messages().get(PLAYER_NOT_FOUND), context.username());
                     return false;
                 }
 
@@ -251,7 +254,7 @@ public final class AuthenticationHelper {
         RegisteredPlayer registeredPlayer = playerResult.getValue();
         if (registeredPlayer == null) {
             if (context.logger().isDebugEnabled()) {
-                context.logger().debug(context.dbMarker(), context.messages().get("player.not.found"), context.username());
+                context.logger().debug(context.dbMarker(), context.messages().get(PLAYER_NOT_FOUND), context.username());
             }
             return null;
         }

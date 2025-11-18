@@ -27,6 +27,17 @@ import java.util.UUID;
  */
 public class CommandHandler {
 
+    // Stałe dla nazw komend
+    private static final String COMMAND_LOGIN = "login";
+    private static final String COMMAND_REGISTER = "register";
+    private static final String COMMAND_CHANGE_PASSWORD = "changepassword";
+    private static final String COMMAND_UNREGISTER = "unregister";
+    private static final String COMMAND_VAUTH = "vauth";
+
+    // Stałe dla wiadomości
+    private static final String ERROR_DATABASE_QUERY = "error.database.query";
+    private static final String ADMIN_STATS_CACHE_SIZE = "admin.stats.cache_size";
+
     // Markery SLF4J dla kategoryzowanego logowania
     private static final Marker AUTH_MARKER = MarkerFactory.getMarker("AUTH");
     private static final Marker SECURITY_MARKER = MarkerFactory.getMarker("SECURITY");
@@ -71,13 +82,13 @@ public class CommandHandler {
         var commandManager = plugin.getServer().getCommandManager();
 
         // Rejestracja komend gracza
-        commandManager.register(commandManager.metaBuilder("login").aliases("log", "l").build(), new LoginCommand());
-        commandManager.register(commandManager.metaBuilder("register").aliases("reg", "r").build(), new RegisterCommand());
-        commandManager.register(commandManager.metaBuilder("changepassword").build(), new ChangePasswordCommand());
+        commandManager.register(commandManager.metaBuilder(COMMAND_LOGIN).aliases("log", "l").build(), new LoginCommand());
+        commandManager.register(commandManager.metaBuilder(COMMAND_REGISTER).aliases("reg", "r").build(), new RegisterCommand());
+        commandManager.register(commandManager.metaBuilder(COMMAND_CHANGE_PASSWORD).build(), new ChangePasswordCommand());
 
         // Rejestracja komend administratora
-        commandManager.register(commandManager.metaBuilder("unregister").build(), new UnregisterCommand());
-        commandManager.register(commandManager.metaBuilder("vauth").build(), new VAuthCommand());
+        commandManager.register(commandManager.metaBuilder(COMMAND_UNREGISTER).build(), new UnregisterCommand());
+        commandManager.register(commandManager.metaBuilder(COMMAND_VAUTH).build(), new VAuthCommand());
 
         logger.info(messages.get("connection.commands.registered"));
     }
@@ -147,7 +158,7 @@ public class CommandHandler {
 
         if (premiumResult.isDatabaseError()) {
             logger.error(SECURITY_MARKER, "[DATABASE ERROR] {} failed for {}: {}", operation, player.getUsername(), premiumResult.getErrorMessage());
-            player.sendMessage(ValidationUtils.createErrorComponent(messages.get("error.database.query")));
+            player.sendMessage(ValidationUtils.createErrorComponent(messages.get(ERROR_DATABASE_QUERY)));
         }
 
         return premiumResult;
@@ -164,7 +175,7 @@ public class CommandHandler {
     private boolean handleDatabaseError(DatabaseManager.DbResult<?> result, Player player, String operation) {
         if (result.isDatabaseError()) {
             logger.error(SECURITY_MARKER, "[DATABASE ERROR] {} failed for {}: {}", operation, player.getUsername(), result.getErrorMessage());
-            player.sendMessage(ValidationUtils.createErrorComponent(messages.get("error.database.query")));
+            player.sendMessage(ValidationUtils.createErrorComponent(messages.get(ERROR_DATABASE_QUERY)));
             return true;
         }
         return false;
@@ -267,7 +278,7 @@ public class CommandHandler {
 
             } catch (Exception e) {
                 logger.error("Błąd podczas przetwarzania udanego logowania: {}", authContext.username, e);
-                authContext.player.sendMessage(ValidationUtils.createErrorComponent(messages.get("error.database.query")));
+                authContext.player.sendMessage(ValidationUtils.createErrorComponent(messages.get(ERROR_DATABASE_QUERY)));
             }
         }
 
@@ -370,7 +381,7 @@ public class CommandHandler {
 
             boolean saved = saveResult.getValue();
             if (!saved) {
-                authContext.player.sendMessage(ValidationUtils.createErrorComponent(messages.get("error.database.query")));
+                authContext.player.sendMessage(ValidationUtils.createErrorComponent(messages.get(ERROR_DATABASE_QUERY)));
                 return;
             }
 
@@ -473,7 +484,7 @@ public class CommandHandler {
 
             boolean saved = saveResult.getValue();
             if (!saved) {
-                authContext.player.sendMessage(ValidationUtils.createErrorComponent(messages.get("error.database.query")));
+                authContext.player.sendMessage(ValidationUtils.createErrorComponent(messages.get(ERROR_DATABASE_QUERY)));
                 return;
             }
 
@@ -652,9 +663,9 @@ public class CommandHandler {
                     var stats = authCache.getStats();
                     CommandHelper.sendWarning(source, messages.get("admin.stats.header"));
                     CommandHelper.sendWarning(source, messages.get("admin.stats.registered_accounts", stats.authorizedPlayersCount()));
-                    CommandHelper.sendWarning(source, messages.get("admin.stats.cache_size", stats.bruteForceEntriesCount()));
-                    CommandHelper.sendWarning(source, messages.get("admin.stats.cache_size", stats.premiumCacheCount()));
-                    CommandHelper.sendWarning(source, messages.get("admin.stats.cache_size", databaseManager.getCacheSize()));
+                    CommandHelper.sendWarning(source, messages.get(ADMIN_STATS_CACHE_SIZE, stats.bruteForceEntriesCount()));
+                    CommandHelper.sendWarning(source, messages.get(ADMIN_STATS_CACHE_SIZE, stats.premiumCacheCount()));
+                    CommandHelper.sendWarning(source, messages.get(ADMIN_STATS_CACHE_SIZE, databaseManager.getCacheSize()));
                     CommandHelper.sendWarning(source, messages.get("admin.stats.database_status", String.format("%.1f%%", stats.getHitRate())));
                     CommandHelper.sendWarning(source, messages.get("admin.stats.registered_accounts", stats.getTotalRequests()));
                     CommandHelper.sendWarning(source, messages.get("admin.stats.database_status", databaseManager.isConnected() ? messages.get("database.connected") : messages.get("database.disconnected")));

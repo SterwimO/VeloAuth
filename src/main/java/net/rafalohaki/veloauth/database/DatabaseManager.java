@@ -31,6 +31,9 @@ public class DatabaseManager {
 
     private static final Logger logger = LoggerFactory.getLogger(DatabaseManager.class);
 
+    // Stałe dla wiadomości bazy danych
+    private static final String DATABASE_ERROR = "database.error";
+
     // Markery SLF4J dla kategoryzowanego logowania
     private static final Marker DB_MARKER = MarkerFactory.getMarker("DATABASE");
     private static final Marker CACHE_MARKER = MarkerFactory.getMarker("CACHE");
@@ -371,7 +374,7 @@ public class DatabaseManager {
             } catch (SQLException e) {
                 logger.error(DB_MARKER, "Błąd podczas wyszukiwania gracza: {}", normalizedNickname, e);
                 // CRITICAL: Return database error instead of null to prevent bypass
-                return DbResult.databaseError(messages.get("database.error") + ": " + e.getMessage());
+                return DbResult.databaseError(messages.get(DATABASE_ERROR) + ": " + e.getMessage());
             }
         }, dbExecutor);
     }
@@ -399,7 +402,7 @@ public class DatabaseManager {
                 return DbResult.success(success);
             } catch (SQLException e) {
                 logger.error(DB_MARKER, "Błąd podczas zapisywania gracza: {}", player.getNickname(), e);
-                return DbResult.databaseError(messages.get("database.error") + ": " + e.getMessage());
+                return DbResult.databaseError(messages.get(DATABASE_ERROR) + ": " + e.getMessage());
             }
         }, dbExecutor);
     }
@@ -431,7 +434,7 @@ public class DatabaseManager {
                 return DbResult.success(false);
             } catch (SQLException e) {
                 logger.error(DB_MARKER, "Błąd podczas usuwania gracza: {}", lowercaseNickname, e);
-                return DbResult.databaseError(messages.get("database.error") + ": " + e.getMessage());
+                return DbResult.databaseError(messages.get(DATABASE_ERROR) + ": " + e.getMessage());
             }
         }, dbExecutor);
     }
@@ -457,7 +460,7 @@ public class DatabaseManager {
                 return DbResult.success(premium);
             } catch (RuntimeException e) {
                 logger.error(DB_MARKER, "Błąd wykonania podczas sprawdzania premium status dla gracza: {}", username, e);
-                return DbResult.databaseError(messages.get("database.error") + ": " + e.getMessage());
+                return DbResult.databaseError(messages.get(DATABASE_ERROR) + ": " + e.getMessage());
             }
         }, dbExecutor);
     }
@@ -579,31 +582,25 @@ public class DatabaseManager {
                 DatabaseType dbType = DatabaseType.fromName(config.getStorageType());
                 String quote = dbType == DatabaseType.POSTGRESQL ? "\"" : "`";
 
-                // Dodaj brakujące kolumny
+                // Dodaj brakujące kolumny - używamy stałych wartości, nie user input
                 if (!hasPremiumUuid) {
-                    String sql = String.format("ALTER TABLE %sAUTH%s ADD COLUMN %sPREMIUMUUID%s VARCHAR(36)", 
-                            quote, quote, quote, quote);
-                    try (java.sql.Statement stmt = connection.createStatement()) {
-                        stmt.execute(sql);
-                    }
+                    String sql = "ALTER TABLE " + quote + "AUTH" + quote + 
+                                 " ADD COLUMN " + quote + "PREMIUMUUID" + quote + " VARCHAR(36)";
+                    executeAlterTable(connection, sql);
                     logger.info(DB_MARKER, "Dodano kolumnę PREMIUMUUID do tabeli AUTH");
                 }
 
                 if (!hasTotpToken) {
-                    String sql = String.format("ALTER TABLE %sAUTH%s ADD COLUMN %sTOTPTOKEN%s VARCHAR(32)", 
-                            quote, quote, quote, quote);
-                    try (java.sql.Statement stmt = connection.createStatement()) {
-                        stmt.execute(sql);
-                    }
+                    String sql = "ALTER TABLE " + quote + "AUTH" + quote + 
+                                 " ADD COLUMN " + quote + "TOTPTOKEN" + quote + " VARCHAR(32)";
+                    executeAlterTable(connection, sql);
                     logger.info(DB_MARKER, "Dodano kolumnę TOTPTOKEN do tabeli AUTH");
                 }
 
                 if (!hasIssuedTime) {
-                    String sql = String.format("ALTER TABLE %sAUTH%s ADD COLUMN %sISSUEDTIME%s BIGINT DEFAULT 0", 
-                            quote, quote, quote, quote);
-                    try (java.sql.Statement stmt = connection.createStatement()) {
-                        stmt.execute(sql);
-                    }
+                    String sql = "ALTER TABLE " + quote + "AUTH" + quote + 
+                                 " ADD COLUMN " + quote + "ISSUEDTIME" + quote + " BIGINT DEFAULT 0";
+                    executeAlterTable(connection, sql);
                     logger.info(DB_MARKER, "Dodano kolumnę ISSUEDTIME do tabeli AUTH");
                 }
 
@@ -617,6 +614,16 @@ public class DatabaseManager {
         } catch (SQLException e) {
             logger.error(DB_MARKER, "Błąd podczas migracji tabeli AUTH dla limboauth", e);
             throw e;
+        }
+    }
+
+    /**
+     * Wykonuje ALTER TABLE statement w bezpieczny sposób.
+     * Używa stałych wartości - nie ma ryzyka SQL injection.
+     */
+    private void executeAlterTable(java.sql.Connection connection, String sql) throws SQLException {
+        try (java.sql.Statement stmt = connection.createStatement()) {
+            stmt.execute(sql);
         }
     }
 
