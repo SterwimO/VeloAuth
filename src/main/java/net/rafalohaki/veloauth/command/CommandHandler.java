@@ -651,8 +651,59 @@ public class CommandHandler {
                 case "reload" -> handleReloadCommand(source);
                 case "cache-reset" -> handleCacheResetCommand(source, args);
                 case "stats" -> handleStatsCommand(source);
+                case "conflicts" -> handleConflictsCommand(source);
                 default -> sendAdminHelp(source);
             }
+        }
+        
+        private void handleConflictsCommand(CommandSource source) {
+            source.sendMessage(ValidationUtils.createWarningComponent("=== 🔥 Konflikty Nicknames ==="));
+            
+            var conflictsFuture = databaseManager.findPlayersInConflictMode();
+            var conflicts = conflictsFuture.join();
+            
+            if (conflicts.isEmpty()) {
+                source.sendMessage(ValidationUtils.createSuccessComponent("✅ Brak aktywnych konfliktów!"));
+                return;
+            }
+            
+            source.sendMessage(ValidationUtils.createWarningComponent("⚠ Znaleziono " + conflicts.size() + " konflikt(ów):"));
+            source.sendMessage(ValidationUtils.createWarningComponent(""));
+            
+            for (int i = 0; i < conflicts.size(); i++) {
+                RegisteredPlayer conflict = conflicts.get(i);
+                
+                // Format conflict info
+                StringBuilder conflictInfo = new StringBuilder();
+                conflictInfo.append("§e").append(i + 1).append(". §f").append(conflict.getNickname()).append("\n");
+                conflictInfo.append("   §7UUID: §f").append(conflict.getUuid()).append("\n");
+                conflictInfo.append("   §7IP: §f").append(conflict.getIp()).append("\n");
+                
+                // Show conflict timestamp
+                if (conflict.getConflictTimestamp() > 0) {
+                    long conflictTime = conflict.getConflictTimestamp();
+                    long hoursAgo = (System.currentTimeMillis() - conflictTime) / (1000 * 60 * 60);
+                    conflictInfo.append("   §7Konflikt od: §f").append(hoursAgo).append(" godzin temu\n");
+                }
+                
+                // Show original nickname if different
+                if (conflict.getOriginalNickname() != null && 
+                    !conflict.getOriginalNickname().equals(conflict.getNickname())) {
+                    conflictInfo.append("   §7Oryginalny nick: §f").append(conflict.getOriginalNickname()).append("\n");
+                }
+                
+                // Show premium status using runtime detection
+                boolean isPremium = databaseManager.isPlayerPremiumRuntime(conflict);
+                conflictInfo.append("   §7Status: ").append(isPremium ? "§6PREMIUM" : "§aOFFLINE").append("\n");
+                
+                source.sendMessage(ValidationUtils.createWarningComponent(conflictInfo.toString()));
+            }
+            
+            source.sendMessage(ValidationUtils.createWarningComponent(""));
+            source.sendMessage(ValidationUtils.createWarningComponent("💡 Porady:"));
+            source.sendMessage(ValidationUtils.createWarningComponent("• Premium gracze: Zmień nick na Mojang.com"));
+            source.sendMessage(ValidationUtils.createWarningComponent("• Offline gracze: Zaloguj się hasłem"));
+            source.sendMessage(ValidationUtils.createWarningComponent("• Admin: Użyj /vauth unregister <nick> do usunięcia konta"));
         }
         
         private void handleReloadCommand(CommandSource source) {
@@ -718,6 +769,7 @@ public class CommandHandler {
             CommandHelper.sendWarning(source, "/vauth reload - Reload configuration");
             CommandHelper.sendWarning(source, "/vauth cache-reset [player] - Clear cache");
             CommandHelper.sendWarning(source, "/vauth stats - Show statistics");
+            CommandHelper.sendWarning(source, "/vauth conflicts - List nickname conflicts");
         }
 
         @Override
@@ -725,7 +777,7 @@ public class CommandHandler {
             String[] args = invocation.arguments();
 
             if (args.length == 1) {
-                return List.of("reload", "cache-reset", "stats");
+                return List.of("reload", "cache-reset", "stats", "conflicts");
             }
 
             return List.of();

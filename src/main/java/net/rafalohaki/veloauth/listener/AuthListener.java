@@ -194,6 +194,18 @@ public class AuthListener {
         PremiumResolutionResult result = resolvePremiumStatus(username);
         premium = result.premium();
 
+        // 🔥 USE_OFFLINE: Check for nickname conflicts with runtime detection
+        RegisteredPlayer existingPlayer = databaseManager.findPlayerWithRuntimeDetection(username).join().getValue();
+        
+        if (existingPlayer != null) {
+            boolean existingIsPremium = databaseManager.isPlayerPremiumRuntime(existingPlayer);
+            
+            if (isNicknameConflict(existingPlayer, premium, existingIsPremium)) {
+                handleNicknameConflict(event, existingPlayer, premium);
+                return;
+            }
+        }
+
         if (premium) {
             event.setResult(PreLoginEvent.PreLoginComponentResult.forceOnlineMode());
         } else {
@@ -352,6 +364,18 @@ public class AuthListener {
                 player.getUsername(), playerIp);
 
         try {
+            // 🔥 USE_OFFLINE: Check for conflict resolution messages with runtime detection
+            RegisteredPlayer registeredPlayer = databaseManager.findPlayerWithRuntimeDetection(player.getUsername()).join().getValue();
+            if (registeredPlayer != null && registeredPlayer.getConflictMode()) {
+                boolean isPremium = Optional.ofNullable(authCache.getPremiumStatus(player.getUsername()))
+                        .map(PremiumCacheEntry::isPremium)
+                        .orElse(false);
+                
+                if (isPremium) {
+                    showConflictResolutionMessage(player);
+                }
+            }
+
             if (player.isOnlineMode()) {
                 if (logger.isInfoEnabled()) {
                     logger.info(AUTH_MARKER, messages.get("player.premium.verified"), player.getUsername());
@@ -711,6 +735,82 @@ public class AuthListener {
             logger.error("Błąd podczas weryfikacji UUID gracza: {}", player.getUsername(), e);
         }
         return false;
+    }
+
+    /**
+     * 🔥 USE_OFFLINE: Shows conflict resolution message to premium players.
+     * 
+     * @param player The player to show message to
+     * @param registeredPlayer The registered player with conflict
+     */
+    private void showConflictResolutionMessage(Player player) {
+        Component message = Component.text()
+            .append(Component.text("⚠️ Konflikt nicknames!", NamedTextColor.YELLOW))
+            .append(Component.newline())
+            .append(Component.text("Ten nickname jest używany przez gracza offline.", NamedTextColor.RED))
+            .append(Component.newline())
+            .append(Component.text("Opcje:", NamedTextColor.WHITE))
+            .append(Component.newline())
+            .append(Component.text("1. Zaloguj się hasłem gracza offline (tymczasowy dostęp)", NamedTextColor.GRAY))
+            .append(Component.newline())
+            .append(Component.text("2. Zmień nick na Mojang.com i odzyskaj dostęp premium", NamedTextColor.GREEN))
+            .append(Component.newline())
+            .append(Component.text("Po zmianie nicku system automatycznie rozwiąże konflikt.", NamedTextColor.AQUA))
+            .build();
+        
+        player.sendMessage(message);
+        logger.info("[CONFLICT MESSAGE] Sent conflict resolution message to premium player: {}", player.getUsername());
+    }
+
+    /**
+     * 🔥 USE_OFFLINE: Checks if a nickname conflict exists between premium and offline players.
+     * 
+     * @param existingPlayer Existing player in database
+     * @param isPremium Whether current player is premium
+     * @param existingIsPremium Whether existing player is premium (runtime detection)
+     * @return true if conflict exists
+     */
+    private boolean isNicknameConflict(RegisteredPlayer existingPlayer, boolean isPremium, boolean existingIsPremium) {
+        // Conflict scenarios:
+        // 1. Premium player trying to use offline nickname
+        // 2. Offline player trying to access account in conflict mode
+        return (isPremium && !existingIsPremium) || 
+               (!isPremium && existingPlayer.getConflictMode());
+    }
+
+    /**
+     * 🔥 USE_OFFLINE: Handles nickname conflict by forcing offline mode and tracking conflict.
+     * 
+     * @param event PreLoginEvent
+     * @param existingPlayer Existing player in database
+     * @param isPremium Whether current player is premium
+     */
+    private void handleNicknameConflict(PreLoginEvent event, RegisteredPlayer existingPlayer, boolean isPremium) {
+        String username = event.getUsername();
+        
+        if (isPremium && existingPlayer.getPremiumUuid() == null) {
+            // Premium player trying to use offline nickname
+            if (!existingPlayer.getConflictMode()) {
+                // Mark conflict for the first time
+                existingPlayer.setConflictMode(true);
+                existingPlayer.setConflictTimestamp(System.currentTimeMillis());
+                existingPlayer.setOriginalNickname(existingPlayer.getNickname());
+                
+                // Update existing player to mark conflict
+                databaseManager.savePlayer(existingPlayer).join();
+                
+                logger.info("[NICKNAME CONFLICT] Premium player {} detected conflict with offline account", username);
+            }
+            
+            // Force offline mode for premium player
+            event.setResult(PreLoginEvent.PreLoginComponentResult.forceOfflineMode());
+            
+        } else if (!isPremium && existingPlayer.getConflictMode()) {
+            // Offline player accessing conflicted account
+            event.setResult(PreLoginEvent.PreLoginComponentResult.forceOfflineMode());
+            
+            logger.debug("[NICKNAME CONFLICT] Offline player {} accessing conflicted account", username);
+        }
     }
 
     /**

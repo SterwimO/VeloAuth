@@ -6,6 +6,8 @@ import org.slf4j.LoggerFactory;
 
 import javax.sql.DataSource;
 import java.sql.*;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Objects;
 
 /**
@@ -243,6 +245,68 @@ public final class JdbcAuthDao {
         player.setTotpToken(resultSet.getString("TOTPTOKEN"));
         player.setIssuedTime(resultSet.getLong("ISSUEDTIME"));
 
+        return player;
+    }
+
+    /**
+     * 🔥 ADMIN COMMAND: Finds all players in conflict mode.
+     * Uses fallback handling for shared LimboAuth databases without conflict columns.
+     * 
+     * @return List of players with CONFLICT_MODE = true, or empty list if columns don't exist
+     */
+    public List<RegisteredPlayer> findAllPlayersInConflictMode() throws SQLException {
+        String conflictQuery = "SELECT NICKNAME, HASH, IP, LOGINIP, UUID, REGDATE, LOGINDATE, " +
+                              "PREMIUMUUID, TOTPTOKEN, ISSUEDTIME, LOWERCASENICKNAME, " +
+                              "CONFLICT_MODE, CONFLICT_TIMESTAMP, ORIGINAL_NICKNAME " +
+                              "FROM " + table("AUTH") + WHERE_CLAUSE + column("CONFLICT_MODE") + " = ?";
+        
+        try (Connection connection = openConnection();
+             PreparedStatement statement = connection.prepareStatement(conflictQuery)) {
+            
+            statement.setBoolean(1, true);
+            
+            try (ResultSet resultSet = statement.executeQuery()) {
+                List<RegisteredPlayer> conflicts = new ArrayList<>();
+                while (resultSet.next()) {
+                    RegisteredPlayer player = mapPlayerWithConflict(resultSet);
+                    conflicts.add(player);
+                }
+                return conflicts;
+            }
+        } catch (SQLException e) {
+            // Graceful fallback for shared LimboAuth databases without conflict columns
+            if (logger.isDebugEnabled()) {
+                logger.debug("Conflict columns not available in database (shared LimboAuth?): {}", e.getMessage());
+            }
+            return List.of();
+        }
+    }
+
+    /**
+     * Maps ResultSet to RegisteredPlayer including conflict tracking fields.
+     */
+    private RegisteredPlayer mapPlayerWithConflict(ResultSet resultSet) throws SQLException {
+        RegisteredPlayer player = mapPlayer(resultSet);
+        
+        // Conflict tracking fields (may not exist in pure LimboAuth databases)
+        try {
+            player.setConflictMode(resultSet.getBoolean("CONFLICT_MODE"));
+        } catch (SQLException e) {
+            player.setConflictMode(false); // Default if column doesn't exist
+        }
+        
+        try {
+            player.setConflictTimestamp(resultSet.getLong("CONFLICT_TIMESTAMP"));
+        } catch (SQLException e) {
+            player.setConflictTimestamp(0L); // Default if column doesn't exist
+        }
+        
+        try {
+            player.setOriginalNickname(resultSet.getString("ORIGINAL_NICKNAME"));
+        } catch (SQLException e) {
+            player.setOriginalNickname(null); // Default if column doesn't exist
+        }
+        
         return player;
     }
 

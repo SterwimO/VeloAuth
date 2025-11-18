@@ -85,6 +85,25 @@ public class RegisteredPlayer {
     private long issuedTime;
 
     /**
+     * Flag for nickname conflict resolution (USE_OFFLINE strategy).
+     * true = player is in conflict mode and must use offline authentication
+     */
+    @DatabaseField(columnName = "CONFLICT_MODE")
+    private boolean conflictMode;
+
+    /**
+     * Timestamp when conflict was detected (for grace period tracking).
+     */
+    @DatabaseField(columnName = "CONFLICT_TIMESTAMP")
+    private long conflictTimestamp;
+
+    /**
+     * Original nickname before conflict (for migration/restore purposes).
+     */
+    @DatabaseField(columnName = "ORIGINAL_NICKNAME")
+    private String originalNickname;
+
+    /**
      * Konstruktor bezparametrowy wymagany przez ORMLite.
      */
     public RegisteredPlayer() {
@@ -315,18 +334,57 @@ public class RegisteredPlayer {
     }
 
     /**
-     * Sprawdza czy gracz ma konto premium.
+     * Zwraca flagę konfliktu nicknames.
      *
-     * @return false - premium status should be checked through DatabaseManager
-     * @deprecated Use DatabaseManager.isPremium(nickname) instead - this method doesn't have access to PREMIUM_UUIDS table
-     * NOTE: This method is still used throughout the codebase during migration.
-     * Do not remove until all callers are updated to use DatabaseManager.isPremium().
+     * @return true jeśli gracz jest w trybie konfliktu
      */
-    @Deprecated(since = "1.0.0", forRemoval = true)
-    public boolean isPremium() {
-        // Premium status is now handled by PREMIUM_UUIDS table
-        // Use DatabaseManager.isPremium(nickname) for proper lookup
-        return false;
+    public boolean getConflictMode() {
+        return conflictMode;
+    }
+
+    /**
+     * Ustawia flagę konfliktu nicknames.
+     *
+     * @param conflictMode true jeśli gracz jest w trybie konfliktu
+     */
+    public void setConflictMode(boolean conflictMode) {
+        this.conflictMode = conflictMode;
+    }
+
+    /**
+     * Zwraca timestamp wykrycia konfliktu.
+     *
+     * @return Timestamp konfliktu w milisekundach
+     */
+    public long getConflictTimestamp() {
+        return conflictTimestamp;
+    }
+
+    /**
+     * Ustawia timestamp wykrycia konfliktu.
+     *
+     * @param conflictTimestamp Timestamp konfliktu w milisekundach
+     */
+    public void setConflictTimestamp(long conflictTimestamp) {
+        this.conflictTimestamp = conflictTimestamp;
+    }
+
+    /**
+     * Zwraca oryginalny nickname przed konfliktem.
+     *
+     * @return Oryginalny nickname lub null jeśli brak konfliktu
+     */
+    public String getOriginalNickname() {
+        return originalNickname;
+    }
+
+    /**
+     * Ustawia oryginalny nickname przed konfliktem.
+     *
+     * @param originalNickname Oryginalny nickname
+     */
+    public void setOriginalNickname(String originalNickname) {
+        this.originalNickname = originalNickname;
     }
 
     /**
@@ -380,7 +438,7 @@ public class RegisteredPlayer {
                 ", uuid='" + uuid + '\'' +
                 ", regDate=" + regDate +
                 ", loginDate=" + loginDate +
-                ", isPremium=" + isPremium() +
+                ", isPremium=" + (premiumUuid != null) + // Direct check instead of deprecated method
                 '}';
     }
 }

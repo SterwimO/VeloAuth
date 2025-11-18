@@ -426,9 +426,17 @@ public class DatabaseManager {
         String normalizedNickname = nickname.toLowerCase();
 
         return CompletableFuture.supplyAsync(() -> {
-            DbResult<RegisteredPlayer> cacheResult = checkCache(normalizedNickname);
-            if (cacheResult != null) {
+            DbResult<RegisteredPlayer> cacheResult = checkCacheSafe(normalizedNickname);
+            
+            // Check for database errors (shouldn't happen in cache, but fail-secure)
+            if (cacheResult.isDatabaseError()) {
                 return cacheResult;
+            }
+            
+            // Check for cache hit
+            RegisteredPlayer cachedPlayer = cacheResult.getValue();
+            if (cachedPlayer != null) {
+                return DbResult.success(cachedPlayer);
             }
 
             DbResult<Void> connectionResult = validateDatabaseConnection();
@@ -438,21 +446,6 @@ public class DatabaseManager {
 
             return queryPlayerFromDatabase(normalizedNickname);
         }, dbExecutor);
-    }
-
-    private DbResult<RegisteredPlayer> checkCache(String normalizedNickname) {
-        RegisteredPlayer cached = playerCache.get(normalizedNickname);
-        if (cached == null) {
-            return null; // Cache miss
-        }
-
-        if (isCacheCorrupted(cached, normalizedNickname)) {
-            handleCacheCorruption(normalizedNickname);
-            return null; // Treat as cache miss
-        }
-
-        logCacheHit(normalizedNickname);
-        return DbResult.success(cached);
     }
 
     private boolean isCacheCorrupted(RegisteredPlayer cached, String normalizedNickname) {
@@ -847,7 +840,10 @@ public class DatabaseManager {
         boolean hasPremiumUuid = columnExists(connection, AUTH_TABLE, "PREMIUMUUID");
         boolean hasTotpToken = columnExists(connection, AUTH_TABLE, "TOTPTOKEN");
         boolean hasIssuedTime = columnExists(connection, AUTH_TABLE, "ISSUEDTIME");
-        return new ColumnMigrationResult(hasPremiumUuid, hasTotpToken, hasIssuedTime);
+        boolean hasConflictMode = columnExists(connection, AUTH_TABLE, "CONFLICT_MODE");
+        boolean hasConflictTimestamp = columnExists(connection, AUTH_TABLE, "CONFLICT_TIMESTAMP");
+        boolean hasOriginalNickname = columnExists(connection, AUTH_TABLE, "ORIGINAL_NICKNAME");
+        return new ColumnMigrationResult(hasPremiumUuid, hasTotpToken, hasIssuedTime, hasConflictMode, hasConflictTimestamp, hasOriginalNickname);
     }
 
     private void addMissingColumns(java.sql.Connection connection, ColumnMigrationResult result, String quote) throws SQLException {
@@ -861,6 +857,19 @@ public class DatabaseManager {
 
         if (!result.hasIssuedTime) {
             addColumn(connection, quote, "ISSUEDTIME", "BIGINT DEFAULT 0", "Dodano kolumnę ISSUEDTIME do tabeli AUTH");
+        }
+
+        // Add conflict resolution columns for USE_OFFLINE strategy
+        if (!result.hasConflictMode) {
+            addColumn(connection, quote, "CONFLICT_MODE", "BOOLEAN DEFAULT FALSE", "Dodano kolumnę CONFLICT_MODE do tabeli AUTH");
+        }
+
+        if (!result.hasConflictTimestamp) {
+            addColumn(connection, quote, "CONFLICT_TIMESTAMP", "BIGINT DEFAULT 0", "Dodano kolumnę CONFLICT_TIMESTAMP do tabeli AUTH");
+        }
+
+        if (!result.hasOriginalNickname) {
+            addColumn(connection, quote, "ORIGINAL_NICKNAME", "VARCHAR(16)", "Dodano kolumnę ORIGINAL_NICKNAME do tabeli AUTH");
         }
     }
 
@@ -903,26 +912,46 @@ public class DatabaseManager {
      * Tworzy indeksy dla wydajności.
      */
     private void createIndexesIfNotExists() {
+        DatabaseType dbType = DatabaseType.fromName(config.getStorageType());
+
+        // Indeksy różnią się między bazami danych
+        if (dbType == DatabaseType.POSTGRESQL) {
+            createPostgreSqlIndexes();
+        } else if (dbType == DatabaseType.MYSQL) {
+            createMySqlIndexes();
+        }
+        // H2 i SQLite tworzą indeksy automatycznie dla kluczy obcych
+    }
+
+    /**
+     * Tworzy indeksy dla PostgreSQL.
+     */
+    private void createPostgreSqlIndexes() {
+        createIndexSafely("CREATE INDEX IF NOT EXISTS idx_auth_ip ON \"AUTH\" (\"IP\")");
+        createIndexSafely("CREATE INDEX IF NOT EXISTS idx_auth_uuid ON \"AUTH\" (\"UUID\")");
+        createIndexSafely("CREATE INDEX IF NOT EXISTS idx_auth_logindate ON \"AUTH\" (\"LOGINDATE\")");
+        createIndexSafely("CREATE INDEX IF NOT EXISTS idx_auth_regdate ON \"AUTH\" (\"REGDATE\")");
+    }
+
+    /**
+     * Tworzy indeksy dla MySQL.
+     */
+    private void createMySqlIndexes() {
+        createIndexSafely("CREATE INDEX IF NOT EXISTS idx_auth_ip ON `AUTH` (`IP`)");
+        createIndexSafely("CREATE INDEX IF NOT EXISTS idx_auth_uuid ON `AUTH` (`UUID`)");
+        createIndexSafely("CREATE INDEX IF NOT EXISTS idx_auth_logindate ON `AUTH` (`LOGINDATE`)");
+        createIndexSafely("CREATE INDEX IF NOT EXISTS idx_auth_regdate ON `AUTH` (`REGDATE`)");
+    }
+
+    /**
+     * Bezpiecznie tworzy indeks z obsługą błędów.
+     */
+    private void createIndexSafely(String sql) {
         try {
-            DatabaseType dbType = DatabaseType.fromName(config.getStorageType());
-
-            // Indeksy różnią się między bazami danych
-            if (dbType == DatabaseType.POSTGRESQL) {
-                executeUpdate("CREATE INDEX IF NOT EXISTS idx_auth_ip ON \"AUTH\" (\"IP\")");
-                executeUpdate("CREATE INDEX IF NOT EXISTS idx_auth_uuid ON \"AUTH\" (\"UUID\")");
-                executeUpdate("CREATE INDEX IF NOT EXISTS idx_auth_logindate ON \"AUTH\" (\"LOGINDATE\")");
-                executeUpdate("CREATE INDEX IF NOT EXISTS idx_auth_regdate ON \"AUTH\" (\"REGDATE\")");
-            } else if (dbType == DatabaseType.MYSQL) {
-                executeUpdate("CREATE INDEX IF NOT EXISTS idx_auth_ip ON `AUTH` (`IP`)");
-                executeUpdate("CREATE INDEX IF NOT EXISTS idx_auth_uuid ON `AUTH` (`UUID`)");
-                executeUpdate("CREATE INDEX IF NOT EXISTS idx_auth_logindate ON `AUTH` (`LOGINDATE`)");
-                executeUpdate("CREATE INDEX IF NOT EXISTS idx_auth_regdate ON `AUTH` (`REGDATE`)");
-            }
-            // H2 i SQLite tworzą indeksy automatycznie dla kluczy obcych
-
+            executeUpdate(sql);
         } catch (SQLException e) {
-            if (logger.isWarnEnabled()) {
-                logger.warn(messages.get("database.manager.index_error"), e.getMessage());
+            if (logger.isDebugEnabled()) {
+                logger.debug("Index creation failed (may already exist): {}", e.getMessage());
             }
         }
     }
@@ -944,7 +973,144 @@ public class DatabaseManager {
         }
     }
 
-    private record ColumnMigrationResult(boolean hasPremiumUuid, boolean hasTotpToken, boolean hasIssuedTime) {
+    /**
+     * 🔥 RUNTIME DETECTION: Detects if a player is premium based on HASHEDPASSWORD.
+     * Used for shared LimboAuth databases without migration.
+     * 
+     * @param player RegisteredPlayer from database
+     * @return true if player is premium (empty/null hash), false if offline (has password)
+     */
+    public boolean isPlayerPremiumRuntime(RegisteredPlayer player) {
+        if (player == null) {
+            return false;
+        }
+        
+        String hash = player.getHash();
+        // Premium accounts have empty/null HASHEDPASSWORD in LimboAuth
+        return hash == null || hash.isEmpty() || hash.isBlank();
+    }
+
+    /**
+     * 🔥 RUNTIME DETECTION: Enhanced player lookup with premium detection.
+     * For shared LimboAuth databases - detects premium/offline without migration.
+     * 
+     * @param nickname Player nickname
+     * @return DbResult with RegisteredPlayer and runtime premium detection
+     */
+    public CompletableFuture<DbResult<RegisteredPlayer>> findPlayerWithRuntimeDetection(String nickname) {
+        if (nickname == null || nickname.isEmpty()) {
+            return CompletableFuture.completedFuture(DbResult.success(null));
+        }
+
+        String normalizedNickname = nickname.toLowerCase();
+
+        return CompletableFuture.supplyAsync(() -> {
+            // Check cache first - ALWAYS returns DbResult now
+            DbResult<RegisteredPlayer> cacheResult = checkCacheSafe(normalizedNickname);
+            
+            // Check for database errors (shouldn't happen in cache, but fail-secure)
+            if (cacheResult.isDatabaseError()) {
+                return cacheResult;
+            }
+            
+            // Check for cache hit
+            RegisteredPlayer cachedPlayer = cacheResult.getValue();
+            if (cachedPlayer != null) {
+                if (logger.isDebugEnabled()) {
+                    logger.debug(CACHE_MARKER, 
+                        "Runtime detection - cache HIT: {}", normalizedNickname);
+                }
+                return DbResult.success(cachedPlayer);
+            }
+            
+            // Cache miss - query database with runtime detection
+            if (logger.isDebugEnabled()) {
+                logger.debug(CACHE_MARKER, 
+                    "Runtime detection - cache MISS: {}", normalizedNickname);
+            }
+
+            // Query database with runtime detection
+            return queryPlayerWithRuntimeDetection(normalizedNickname, nickname);
+        }, dbExecutor);
+    }
+
+    /**
+     * Null-safe cache check that ALWAYS returns DbResult.
+     * Never returns null - returns DbResult.success(null) for cache miss.
+     */
+    private DbResult<RegisteredPlayer> checkCacheSafe(String normalizedNickname) {
+        RegisteredPlayer cached = playerCache.get(normalizedNickname);
+        
+        // Cache miss
+        if (cached == null) {
+            return DbResult.success(null);
+        }
+        
+        // Cache corruption check
+        if (isCacheCorrupted(cached, normalizedNickname)) {
+            handleCacheCorruption(normalizedNickname);
+            return DbResult.success(null); // Treat corruption as cache miss
+        }
+        
+        // Cache hit
+        logCacheHit(normalizedNickname);
+        return DbResult.success(cached);
+    }
+
+    /**
+     * Queries database and applies runtime premium detection.
+     */
+    private DbResult<RegisteredPlayer> queryPlayerWithRuntimeDetection(String normalizedNickname, String originalNickname) {
+        try {
+            RegisteredPlayer player = jdbcAuthDao.findPlayerByLowercaseNickname(normalizedNickname);
+            if (player == null) {
+                return DbResult.success(null);
+            }
+
+            // 🔥 RUNTIME DETECTION: Detect premium status without database modification
+            boolean isPremium = isPlayerPremiumRuntime(player);
+            
+            // Cache the result with runtime detection
+            playerCache.put(normalizedNickname, player);
+            
+            logRuntimeDetection(originalNickname, isPremium, player.getHash());
+
+            return DbResult.success(player);
+        } catch (SQLException e) {
+            logger.error("Database error during runtime detection for player: {}", originalNickname, e);
+            return DbResult.databaseError("Database error: " + e.getMessage());
+        }
+    }
+
+    /**
+     * Logs runtime detection results for debugging.
+     */
+    private void logRuntimeDetection(String nickname, boolean isPremium, String hash) {
+        if (logger.isDebugEnabled()) {
+            logger.debug("[RUNTIME DETECTION] {} -> {} (hash empty: {})", 
+                       nickname, isPremium ? "PREMIUM" : "OFFLINE", 
+                       hash == null || hash.isEmpty());
+        }
+    }
+
+    /**
+     * 🔥 ADMIN COMMAND: Finds all players currently in conflict mode.
+     * Used by /vauth conflicts command to list nickname conflicts.
+     * 
+     * @return List of players with conflict mode enabled
+     */
+    public CompletableFuture<List<RegisteredPlayer>> findPlayersInConflictMode() {
+        return CompletableFuture.supplyAsync(() -> {
+            try {
+                return jdbcAuthDao.findAllPlayersInConflictMode();
+            } catch (SQLException e) {
+                logger.error("Database error while finding players in conflict mode", e);
+                return List.of();
+            }
+        }, dbExecutor);
+    }
+
+    private record ColumnMigrationResult(boolean hasPremiumUuid, boolean hasTotpToken, boolean hasIssuedTime, boolean hasConflictMode, boolean hasConflictTimestamp, boolean hasOriginalNickname) {
     }
 
     /**
