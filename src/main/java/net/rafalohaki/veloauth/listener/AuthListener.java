@@ -326,8 +326,7 @@ public class AuthListener {
                 try {
                     boolean success = connectionManager.transferToPicoLimbo(player);
                     if (success) {
-                        logger.info(messages.get("player.transfer.success"),
-                                player.getUsername());
+                        // Success logged by ConnectionManager to avoid duplication
                     } else {
                         logger.error("\u274C Błąd podczas przenoszenia gracza {} na PicoLimbo",
                                 player.getUsername());
@@ -450,10 +449,12 @@ public class AuthListener {
             logger.debug("ServerConnectedEvent dla gracza {} -> serwer {}",
                     player.getUsername(), serverName);
 
-            // Loguj transfer na backend
+            // Loguj transfer na backend (debug level to reduce spam)
             if (!serverName.equals(settings.getPicoLimboServerName())) {
-                logger.info(AUTH_MARKER, messages.get("player.connected.backend"),
-                        player.getUsername(), serverName);
+                if (logger.isDebugEnabled()) {
+                    logger.debug(AUTH_MARKER, messages.get("player.connected.backend"),
+                            player.getUsername(), serverName);
+                }
 
                 // Wyślij wiadomość powitalną
                 player.sendMessage(Component.text(

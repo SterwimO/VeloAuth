@@ -246,7 +246,9 @@ public class ConnectionManager {
             }
 
             RegisteredServer targetServer = picoLimboServer.get();
-            logger.info(messages.get("player.transfer.attempt"), player.getUsername());
+            if (logger.isDebugEnabled()) {
+                logger.debug(messages.get("player.transfer.attempt"), player.getUsername());
+            }
 
             // Asynchroniczne sprawdzenie czy konto istnieje i wyświetlenie odpowiedniego komunikatu
             String lowercaseNick = player.getUsername().toLowerCase();
@@ -359,8 +361,10 @@ public class ConnectionManager {
                     NamedTextColor.YELLOW
             ));
 
-            logger.info(messages.get("player.transfer.backend.attempt"),
-                    player.getUsername(), serverName);
+            if (logger.isDebugEnabled()) {
+                logger.debug(messages.get("player.transfer.backend.attempt"),
+                        player.getUsername(), serverName);
+            }
 
             // Wykonaj transfer synchronicznie z timeoutem
             try {
