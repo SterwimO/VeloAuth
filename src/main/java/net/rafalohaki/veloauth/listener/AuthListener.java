@@ -740,22 +740,21 @@ public class AuthListener {
     /**
      * 🔥 USE_OFFLINE: Shows conflict resolution message to premium players.
      * 
-     * @param player The player to show message to
-     * @param registeredPlayer The registered player with conflict
+     * @param player The premium player experiencing conflict
      */
     private void showConflictResolutionMessage(Player player) {
         Component message = Component.text()
-            .append(Component.text("⚠️ Konflikt nicknames!", NamedTextColor.YELLOW))
+            .append(Component.text(messages.get("player.conflict.header"), NamedTextColor.YELLOW))
             .append(Component.newline())
-            .append(Component.text("Ten nickname jest używany przez gracza offline.", NamedTextColor.RED))
+            .append(Component.text(messages.get("player.conflict.description"), NamedTextColor.RED))
             .append(Component.newline())
-            .append(Component.text("Opcje:", NamedTextColor.WHITE))
+            .append(Component.text(messages.get("player.conflict.options"), NamedTextColor.WHITE))
             .append(Component.newline())
-            .append(Component.text("1. Zaloguj się hasłem gracza offline (tymczasowy dostęp)", NamedTextColor.GRAY))
+            .append(Component.text(messages.get("player.conflict.option1"), NamedTextColor.GRAY))
             .append(Component.newline())
-            .append(Component.text("2. Zmień nick na Mojang.com i odzyskaj dostęp premium", NamedTextColor.GREEN))
+            .append(Component.text(messages.get("player.conflict.option2"), NamedTextColor.GREEN))
             .append(Component.newline())
-            .append(Component.text("Po zmianie nicku system automatycznie rozwiąże konflikt.", NamedTextColor.AQUA))
+            .append(Component.text(messages.get("player.conflict.resolution"), NamedTextColor.AQUA))
             .build();
         
         player.sendMessage(message);

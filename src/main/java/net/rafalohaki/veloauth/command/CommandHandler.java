@@ -36,6 +36,9 @@ public class CommandHandler {
 
     // Stałe dla wiadomości
     private static final String ERROR_DATABASE_QUERY = "error.database.query";
+    
+    // Stałe dla formatowania
+    private static final String CONFLICT_PREFIX = "   §7";
 
     // Markery SLF4J dla kategoryzowanego logowania
     private static final Marker AUTH_MARKER = MarkerFactory.getMarker("AUTH");
@@ -652,58 +655,8 @@ public class CommandHandler {
                 case "cache-reset" -> handleCacheResetCommand(source, args);
                 case "stats" -> handleStatsCommand(source);
                 case "conflicts" -> handleConflictsCommand(source);
-                default -> sendAdminHelp(source);
+                default -> source.sendMessage(ValidationUtils.createErrorComponent(messages.get("admin.reload.failed")));
             }
-        }
-        
-        private void handleConflictsCommand(CommandSource source) {
-            source.sendMessage(ValidationUtils.createWarningComponent("=== 🔥 Konflikty Nicknames ==="));
-            
-            var conflictsFuture = databaseManager.findPlayersInConflictMode();
-            var conflicts = conflictsFuture.join();
-            
-            if (conflicts.isEmpty()) {
-                source.sendMessage(ValidationUtils.createSuccessComponent("✅ Brak aktywnych konfliktów!"));
-                return;
-            }
-            
-            source.sendMessage(ValidationUtils.createWarningComponent("⚠ Znaleziono " + conflicts.size() + " konflikt(ów):"));
-            source.sendMessage(ValidationUtils.createWarningComponent(""));
-            
-            for (int i = 0; i < conflicts.size(); i++) {
-                RegisteredPlayer conflict = conflicts.get(i);
-                
-                // Format conflict info
-                StringBuilder conflictInfo = new StringBuilder();
-                conflictInfo.append("§e").append(i + 1).append(". §f").append(conflict.getNickname()).append("\n");
-                conflictInfo.append("   §7UUID: §f").append(conflict.getUuid()).append("\n");
-                conflictInfo.append("   §7IP: §f").append(conflict.getIp()).append("\n");
-                
-                // Show conflict timestamp
-                if (conflict.getConflictTimestamp() > 0) {
-                    long conflictTime = conflict.getConflictTimestamp();
-                    long hoursAgo = (System.currentTimeMillis() - conflictTime) / (1000 * 60 * 60);
-                    conflictInfo.append("   §7Konflikt od: §f").append(hoursAgo).append(" godzin temu\n");
-                }
-                
-                // Show original nickname if different
-                if (conflict.getOriginalNickname() != null && 
-                    !conflict.getOriginalNickname().equals(conflict.getNickname())) {
-                    conflictInfo.append("   §7Oryginalny nick: §f").append(conflict.getOriginalNickname()).append("\n");
-                }
-                
-                // Show premium status using runtime detection
-                boolean isPremium = databaseManager.isPlayerPremiumRuntime(conflict);
-                conflictInfo.append("   §7Status: ").append(isPremium ? "§6PREMIUM" : "§aOFFLINE").append("\n");
-                
-                source.sendMessage(ValidationUtils.createWarningComponent(conflictInfo.toString()));
-            }
-            
-            source.sendMessage(ValidationUtils.createWarningComponent(""));
-            source.sendMessage(ValidationUtils.createWarningComponent("💡 Porady:"));
-            source.sendMessage(ValidationUtils.createWarningComponent("• Premium gracze: Zmień nick na Mojang.com"));
-            source.sendMessage(ValidationUtils.createWarningComponent("• Offline gracze: Zaloguj się hasłem"));
-            source.sendMessage(ValidationUtils.createWarningComponent("• Admin: Użyj /vauth unregister <nick> do usunięcia konta"));
         }
         
         private void handleReloadCommand(CommandSource source) {
@@ -713,6 +666,54 @@ public class CommandHandler {
             } else {
                 source.sendMessage(ValidationUtils.createErrorComponent(messages.get("admin.reload.failed")));
             }
+        }
+        
+        private void handleConflictsCommand(CommandSource source) {
+            source.sendMessage(ValidationUtils.createWarningComponent(messages.get("admin.conflicts.header")));
+            var conflictsFuture = databaseManager.findPlayersInConflictMode();
+            var conflicts = conflictsFuture.join();
+            
+            if (conflicts.isEmpty()) {
+                source.sendMessage(ValidationUtils.createSuccessComponent(messages.get("admin.conflicts.none")));
+                return;
+            }
+            
+            source.sendMessage(ValidationUtils.createWarningComponent(
+                messages.get("admin.conflicts.found", conflicts.size())));
+            
+            for (int i = 0; i < conflicts.size(); i++) {
+                RegisteredPlayer conflict = conflicts.get(i);
+                StringBuilder conflictInfo = new StringBuilder();
+                conflictInfo.append("§e").append(i + 1).append(". §f").append(conflict.getNickname()).append("\n");
+                conflictInfo.append(CONFLICT_PREFIX).append("UUID: §f").append(conflict.getUuid()).append("\n");
+                conflictInfo.append(CONFLICT_PREFIX).append("IP: §f").append(conflict.getIp()).append("\n");
+                
+                // Show conflict timestamp if available
+                long conflictTime = conflict.getConflictTimestamp();
+                if (conflictTime > 0) {
+                    long hoursAgo = (System.currentTimeMillis() - conflictTime) / (1000 * 60 * 60);
+                    conflictInfo.append(CONFLICT_PREFIX).append(messages.get("admin.conflicts.hours_ago", hoursAgo)).append("\n");
+                }
+                
+                // Show original nickname if different
+                if (conflict.getOriginalNickname() != null && 
+                    !conflict.getOriginalNickname().equals(conflict.getNickname())) {
+                    conflictInfo.append(CONFLICT_PREFIX).append(messages.get("admin.conflicts.original_nick", conflict.getOriginalNickname())).append("\n");
+                }
+                
+                // Show premium status using runtime detection
+                boolean isPremium = databaseManager.isPlayerPremiumRuntime(conflict);
+                String statusKey = isPremium ? "admin.conflicts.status_premium" : "admin.conflicts.status_offline";
+                conflictInfo.append(CONFLICT_PREFIX).append(messages.get(statusKey)).append("\n");
+                
+                source.sendMessage(ValidationUtils.createWarningComponent(conflictInfo.toString()));
+            }
+            
+            source.sendMessage(ValidationUtils.createWarningComponent(""));
+            source.sendMessage(ValidationUtils.createWarningComponent(messages.get("admin.conflicts.tips_header")));
+            source.sendMessage(ValidationUtils.createWarningComponent(messages.get("admin.conflicts.tip_premium")));
+            source.sendMessage(ValidationUtils.createWarningComponent(messages.get("admin.conflicts.tip_offline")));
+            source.sendMessage(ValidationUtils.createWarningComponent(messages.get("admin.conflicts.tip_admin")));
         }
         
         private void handleCacheResetCommand(CommandSource source, String[] args) {

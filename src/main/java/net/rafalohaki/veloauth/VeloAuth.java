@@ -382,26 +382,30 @@ public class VeloAuth {
      * Loguje informacje o starcie pluginu.
      */
     private void logStartupInfo() {
-        logger.info(messages.get("config.display.header"));
-        logger.info(messages.get("config.display.database"),
-                settings.getDatabaseStorageType(),
-                databaseManager.isConnected() ? messages.get("database.connected") : messages.get("database.disconnected"));
-        logger.info(messages.get("config.display.cache_ttl"), settings.getCacheTtlMinutes());
-        logger.info(messages.get("config.display.cache_max_size"), settings.getCacheMaxSize());
-        logger.info(messages.get("config.display.brute_force"),
-                settings.getBruteForceMaxAttempts(),
-                settings.getBruteForceTimeoutMinutes());
-        logger.info(messages.get("config.display.picolimbo_server"), settings.getPicoLimboServerName());
-        logger.info(messages.get("config.display.bcrypt_cost"), settings.getBcryptCost());
-        logger.info(messages.get("config.display.premium_check"),
-                settings.isPremiumCheckEnabled() ? messages.get("premium.check_enabled") : messages.get("premium.check_disabled"));
-
-        // Statystyki cache
-        var stats = authCache.getStats();
-        logger.info(messages.get("config.display.cache_stats"),
-                stats.authorizedPlayersCount(),
-                stats.bruteForceEntriesCount(),
-                stats.premiumCacheCount());
+        if (logger.isInfoEnabled()) {
+            logger.info(messages.get("config.display.header"));
+            
+            String dbStatus = databaseManager.isConnected() ? messages.get("database.connected") : messages.get("database.disconnected");
+            String premiumStatus = settings.isPremiumCheckEnabled() ? messages.get("premium.check_enabled") : messages.get("premium.check_disabled");
+            var stats = authCache.getStats();
+            
+            logger.info(messages.get("config.display.database"),
+                    settings.getDatabaseStorageType(),
+                    dbStatus);
+            logger.info(messages.get("config.display.cache_ttl"), settings.getCacheTtlMinutes());
+            logger.info(messages.get("config.display.cache_max_size"), settings.getCacheMaxSize());
+            logger.info(messages.get("config.display.brute_force"),
+                    settings.getBruteForceMaxAttempts(),
+                    settings.getBruteForceTimeoutMinutes());
+            logger.info(messages.get("config.display.picolimbo_server"), settings.getPicoLimboServerName());
+            logger.info(messages.get("config.display.bcrypt_cost"), settings.getBcryptCost());
+            logger.info(messages.get("config.display.premium_check"), premiumStatus);
+            
+            logger.info(messages.get("config.display.cache_stats"),
+                    stats.authorizedPlayersCount(),
+                    stats.bruteForceEntriesCount(),
+                    stats.premiumCacheCount());
+        }
     }
 
     /**
@@ -411,19 +415,27 @@ public class VeloAuth {
      */
     public boolean reloadConfig() {
         try {
-            logger.info(messages.get("config.reloading"));
+            if (logger.isInfoEnabled()) {
+                logger.info(messages.get("config.reloading"));
+            }
 
             if (settings.load()) {
-                logger.info(messages.get("config.reloaded_success"));
+                if (logger.isInfoEnabled()) {
+                    logger.info(messages.get("config.reloaded_success"));
+                }
                 logStartupInfo();
                 return true;
             } else {
-                logger.error(messages.get("config.reload_failed"));
+                if (logger.isErrorEnabled()) {
+                    logger.error(messages.get("config.reload_failed"));
+                }
                 return false;
             }
 
         } catch (IllegalStateException e) {
-            logger.error("Błąd stanu podczas przeładowywania konfiguracji", e);
+            if (logger.isErrorEnabled()) {
+                logger.error("Błąd stanu podczas przeładowywania konfiguracji", e);
+            }
             return false;
         }
     }
