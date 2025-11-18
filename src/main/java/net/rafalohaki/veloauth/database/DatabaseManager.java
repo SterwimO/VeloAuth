@@ -37,6 +37,14 @@ public class DatabaseManager {
     // Stałe dla zapytań SQL
     private static final String ALTER_TABLE = "ALTER TABLE ";
     private static final String ADD_COLUMN = " ADD COLUMN ";
+    
+    // Stałe dla nazw tabel i kolumn PostgreSQL - eliminacja duplikacji
+    private static final String AUTH_TABLE = "AUTH";
+    private static final String PREMIUM_TABLE = "PREMIUM_UUIDS";
+    private static final String UUID_COLUMN = "UUID";
+    private static final String HASH_COLUMN = "HASH";
+    private static final String WHERE_CLAUSE = " WHERE ";
+    private static final String AS_UUID_FROM = " AS uuid FROM ";
 
     // Markery SLF4J dla kategoryzowanego logowania
     private static final Marker DB_MARKER = MarkerFactory.getMarker("DATABASE");
@@ -687,36 +695,13 @@ public class DatabaseManager {
      */
     public CompletableFuture<Integer> getTotalRegisteredAccounts() {
         return CompletableFuture.supplyAsync(() -> {
-            if (!connected) {
-                if (logger.isWarnEnabled()) {
-                    logger.warn(DB_MARKER, DATABASE_NOT_CONNECTED);
-                }
+            if (!isConnected()) {
+                logDatabaseNotConnected();
                 return 0;
             }
             try {
-                boolean postgres = DatabaseType.POSTGRESQL.getName().equalsIgnoreCase(config.getStorageType());
-                String auth = postgres ? "\"AUTH\"" : "AUTH";
-                String premium = postgres ? "\"PREMIUM_UUIDS\"" : "PREMIUM_UUIDS";
-                String uuid = postgres ? "\"UUID\"" : "UUID";
-                String sql = "SELECT COUNT(DISTINCT uuid) FROM (" +
-                        " SELECT " + uuid + " AS uuid FROM " + auth + " WHERE " + uuid + " IS NOT NULL " +
-                        " UNION " +
-                        " SELECT " + uuid + " AS uuid FROM " + premium +
-                        ") AS combined_uuids";
-
-                DatabaseConnection dbConnection = connectionSource.getReadWriteConnection(null);
-                try {
-                    java.sql.Connection connection = dbConnection.getUnderlyingConnection();
-                    try (java.sql.Statement stmt = connection.createStatement();
-                         java.sql.ResultSet rs = stmt.executeQuery(sql)) {
-                        if (rs.next()) {
-                            return rs.getInt(1);
-                        }
-                        return 0;
-                    }
-                } finally {
-                    connectionSource.releaseConnection(dbConnection);
-                }
+                String sql = buildTotalAccountsQuery();
+                return executeCountQuery(sql);
             } catch (SQLException e) {
                 if (logger.isErrorEnabled()) {
                     logger.error(DB_MARKER, "Error counting total accounts", e);
@@ -731,34 +716,13 @@ public class DatabaseManager {
      */
     public CompletableFuture<Integer> getTotalPremiumAccounts() {
         return CompletableFuture.supplyAsync(() -> {
-            if (!connected) {
+            if (!isConnected()) {
+                logDatabaseNotConnected();
                 return 0;
             }
             try {
-                boolean postgres = DatabaseType.POSTGRESQL.getName().equalsIgnoreCase(config.getStorageType());
-                String auth = postgres ? "\"AUTH\"" : "AUTH";
-                String premium = postgres ? "\"PREMIUM_UUIDS\"" : "PREMIUM_UUIDS";
-                String uuid = postgres ? "\"UUID\"" : "UUID";
-                String hash = postgres ? "\"HASH\"" : "HASH";
-                String sql = "SELECT COUNT(DISTINCT uuid) FROM (" +
-                        " SELECT " + uuid + " AS uuid FROM " + auth + " WHERE " + hash + " IS NULL " +
-                        " UNION " +
-                        " SELECT " + uuid + " AS uuid FROM " + premium +
-                        ") AS premium";
-
-                DatabaseConnection dbConnection = connectionSource.getReadWriteConnection(null);
-                try {
-                    java.sql.Connection connection = dbConnection.getUnderlyingConnection();
-                    try (java.sql.Statement stmt = connection.createStatement();
-                         java.sql.ResultSet rs = stmt.executeQuery(sql)) {
-                        if (rs.next()) {
-                            return rs.getInt(1);
-                        }
-                        return 0;
-                    }
-                } finally {
-                    connectionSource.releaseConnection(dbConnection);
-                }
+                String sql = buildPremiumAccountsQuery();
+                return executeCountQuery(sql);
             } catch (SQLException e) {
                 if (logger.isErrorEnabled()) {
                     logger.error(DB_MARKER, "Error counting premium accounts", e);
@@ -875,9 +839,9 @@ public class DatabaseManager {
     }
 
     private ColumnMigrationResult checkExistingColumns(java.sql.Connection connection) throws SQLException {
-        boolean hasPremiumUuid = columnExists(connection, "AUTH", "PREMIUMUUID");
-        boolean hasTotpToken = columnExists(connection, "AUTH", "TOTPTOKEN");
-        boolean hasIssuedTime = columnExists(connection, "AUTH", "ISSUEDTIME");
+        boolean hasPremiumUuid = columnExists(connection, AUTH_TABLE, "PREMIUMUUID");
+        boolean hasTotpToken = columnExists(connection, AUTH_TABLE, "TOTPTOKEN");
+        boolean hasIssuedTime = columnExists(connection, AUTH_TABLE, "ISSUEDTIME");
         return new ColumnMigrationResult(hasPremiumUuid, hasTotpToken, hasIssuedTime);
     }
 
@@ -896,7 +860,7 @@ public class DatabaseManager {
     }
 
     private void addColumn(java.sql.Connection connection, String quote, String columnName, String columnDefinition, String logMessage) throws SQLException {
-        String sql = ALTER_TABLE + quote + "AUTH" + quote + ADD_COLUMN + quote + columnName + quote + " " + columnDefinition;
+        String sql = ALTER_TABLE + quote + AUTH_TABLE + quote + ADD_COLUMN + quote + columnName + quote + " " + columnDefinition;
         executeAlterTable(connection, sql);
         if (logger.isInfoEnabled()) {
             logger.info(DB_MARKER, logMessage);
@@ -1077,5 +1041,86 @@ public class DatabaseManager {
         public boolean isSuccess() {
             return !isDatabaseError;
         }
+    }
+    
+    // Helper methods to reduce cognitive complexity and eliminate code duplication
+    
+    /**
+     * Loguje ostrzeżenie o braku połączenia z bazą danych.
+     */
+    private void logDatabaseNotConnected() {
+        if (logger.isWarnEnabled()) {
+            logger.warn(DB_MARKER, DATABASE_NOT_CONNECTED);
+        }
+    }
+    
+    /**
+     * Sprawdza czy używamy PostgreSQL.
+     */
+    private boolean isPostgreSQL() {
+        return DatabaseType.POSTGRESQL.getName().equalsIgnoreCase(config.getStorageType());
+    }
+    
+    /**
+     * Zwraca nazwę tabeli/kolumny z odpowiednim formatowaniem dla PostgreSQL.
+     */
+    private String getTableName(String tableName, boolean postgres) {
+        return postgres ? "\"" + tableName + "\"" : tableName;
+    }
+    
+    private String getColumnName(String columnName, boolean postgres) {
+        return postgres ? "\"" + columnName + "\"" : columnName;
+    }
+    
+    /**
+     * Wykonuje zapytanie COUNT i zwraca wynik.
+     */
+    private int executeCountQuery(String sql) throws SQLException {
+        DatabaseConnection dbConnection = connectionSource.getReadWriteConnection(null);
+        try {
+            java.sql.Connection connection = dbConnection.getUnderlyingConnection();
+            try (java.sql.Statement stmt = connection.createStatement();
+                 java.sql.ResultSet rs = stmt.executeQuery(sql)) {
+                if (rs.next()) {
+                    return rs.getInt(1);
+                }
+                return 0;
+            }
+        } finally {
+            connectionSource.releaseConnection(dbConnection);
+        }
+    }
+    
+    /**
+     * Buduje zapytanie SQL do liczenia wszystkich kont.
+     */
+    private String buildTotalAccountsQuery() {
+        boolean postgres = isPostgreSQL();
+        String auth = getTableName(AUTH_TABLE, postgres);
+        String premium = getTableName(PREMIUM_TABLE, postgres);
+        String uuid = getColumnName(UUID_COLUMN, postgres);
+        
+        return "SELECT COUNT(DISTINCT uuid) FROM (" +
+                " SELECT " + uuid + AS_UUID_FROM + auth + WHERE_CLAUSE + uuid + " IS NOT NULL " +
+                " UNION " +
+                " SELECT " + uuid + AS_UUID_FROM + premium +
+                ") AS combined_uuids";
+    }
+    
+    /**
+     * Buduje zapytanie SQL do liczenia kont premium.
+     */
+    private String buildPremiumAccountsQuery() {
+        boolean postgres = isPostgreSQL();
+        String auth = getTableName(AUTH_TABLE, postgres);
+        String premium = getTableName(PREMIUM_TABLE, postgres);
+        String uuid = getColumnName(UUID_COLUMN, postgres);
+        String hash = getColumnName(HASH_COLUMN, postgres);
+        
+        return "SELECT COUNT(DISTINCT uuid) FROM (" +
+                " SELECT " + uuid + AS_UUID_FROM + auth + WHERE_CLAUSE + hash + " IS NULL " +
+                " UNION " +
+                " SELECT " + uuid + AS_UUID_FROM + premium +
+                ") AS premium";
     }
 }

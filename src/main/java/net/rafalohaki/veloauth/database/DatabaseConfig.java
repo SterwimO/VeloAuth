@@ -221,7 +221,7 @@ public final class DatabaseConfig {
         hikariConfig.setPassword(password);
         hikariConfig.setMaximumPoolSize(connectionPoolSize);
         hikariConfig.setMinimumIdle(5);
-        hikariConfig.setMaxLifetime(900000);
+        hikariConfig.setMaxLifetime(maxLifetime);
         hikariConfig.setConnectionTimeout(5000);
         hikariConfig.setIdleTimeout(300000);
         hikariConfig.setAutoCommit(true);
