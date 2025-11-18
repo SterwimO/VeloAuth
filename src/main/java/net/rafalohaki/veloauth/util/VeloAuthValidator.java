@@ -7,7 +7,6 @@ import org.slf4j.Logger;
 import org.slf4j.Marker;
 
 import java.net.InetAddress;
-import java.net.Inet6Address;
 import java.util.regex.Pattern;
 
 /**
@@ -25,12 +24,7 @@ public final class VeloAuthValidator {
     // Password validation - allow most characters but limit length and prevent injection
     private static final Pattern PASSWORD_PATTERN = Pattern.compile("^.{3,100}$");
     
-    // IP address validation patterns
-    private static final Pattern IPV4_PATTERN = Pattern.compile(
-            "^((25[0-5]|2[0-4]\\d|[01]?\\d\\d?)\\.){3}(25[0-5]|2[0-4]\\d|[01]?\\d\\d?)$");
-    
-    private static final Pattern IPV6_PATTERN = Pattern.compile(
-            "(?i)^([0-9a-f]{1,4}:){7}[0-9a-f]{1,4}$|^::1$|^::$");
+    // IP validation handled via InetAddress parsing to reduce regex complexity
 
     private VeloAuthValidator() {
         // Utility class - prevent instantiation
@@ -105,17 +99,12 @@ public final class VeloAuthValidator {
             return ValidationResult.invalid("IP address cannot be null or empty");
         }
 
-        // Check for IPv4
-        if (IPV4_PATTERN.matcher(ipAddress).matches()) {
+        try {
+            InetAddress.getByName(ipAddress);
             return ValidationResult.valid();
+        } catch (Exception e) {
+            return ValidationResult.invalid("Invalid IP address format");
         }
-
-        // Check for IPv6
-        if (IPV6_PATTERN.matcher(ipAddress).matches()) {
-            return ValidationResult.valid();
-        }
-
-        return ValidationResult.invalid("Invalid IP address format");
     }
 
     /**
