@@ -52,13 +52,13 @@ public class AuthListener {
     private static final Marker SECURITY_MARKER = MarkerFactory.getMarker("SECURITY");
 
     private final VeloAuth plugin;
-    private ConnectionManager connectionManager;
     private final AuthCache authCache;
     private final Settings settings;
     private final Logger logger;
+    private final Messages messages;
+    private ConnectionManager connectionManager;
     private PremiumResolverService premiumResolverService;
     private DatabaseManager databaseManager;
-    private final Messages messages;
 
     /**
      * Tworzy nowy AuthListener.
@@ -92,24 +92,6 @@ public class AuthListener {
     }
 
     /**
-     * Updates dependencies after full initialization.
-     * This allows the AuthListener to be registered early for PreLogin protection,
-     * then receive full dependencies when initialization completes.
-     *
-     * @param connectionManager      Manager połączeń (może być null przy wczesnej rejestracji)
-     * @param premiumResolverService Premium resolver service (może być null przy wczesnej rejestracji)
-     * @param databaseManager        Manager bazy danych (może być null przy wczesnej rejestracji)
-     */
-    public void updateDependencies(ConnectionManager connectionManager,
-                                  PremiumResolverService premiumResolverService,
-                                  DatabaseManager databaseManager) {
-        this.connectionManager = connectionManager;
-        this.premiumResolverService = premiumResolverService;
-        this.databaseManager = databaseManager;
-        logger.info("AuthListener dependencies updated successfully");
-    }
-
-    /**
      * Resolves the block reason for unauthorized connections.
      * Replaces nested ternary with clear if/else logic.
      *
@@ -125,6 +107,24 @@ public class AuthListener {
             return "brak aktywnej sesji";
         }
         return "UUID mismatch";
+    }
+
+    /**
+     * Updates dependencies after full initialization.
+     * This allows the AuthListener to be registered early for PreLogin protection,
+     * then receive full dependencies when initialization completes.
+     *
+     * @param connectionManager      Manager połączeń (może być null przy wczesnej rejestracji)
+     * @param premiumResolverService Premium resolver service (może być null przy wczesnej rejestracji)
+     * @param databaseManager        Manager bazy danych (może być null przy wczesnej rejestracji)
+     */
+    public void updateDependencies(ConnectionManager connectionManager,
+                                   PremiumResolverService premiumResolverService,
+                                   DatabaseManager databaseManager) {
+        this.connectionManager = connectionManager;
+        this.premiumResolverService = premiumResolverService;
+        this.databaseManager = databaseManager;
+        logger.info("AuthListener dependencies updated successfully");
     }
 
     /**
@@ -169,7 +169,9 @@ public class AuthListener {
         InetAddress playerAddress = getPlayerAddressFromPreLogin(event);
         if (playerAddress != null && authCache.isBlocked(playerAddress)) {
             String message = "Zbyt wiele nieudanych prób logowania. Spróbuj ponownie później.";
-            logger.warn(SECURITY_MARKER, "[BRUTE FORCE BLOCK] IP {} zablokowany", playerAddress.getHostAddress());
+            if (logger.isWarnEnabled()) {
+                logger.warn(SECURITY_MARKER, "[BRUTE FORCE BLOCK] IP {} zablokowany", playerAddress.getHostAddress());
+            }
             event.setResult(PreLoginEvent.PreLoginComponentResult.denied(
                     Component.text(message, NamedTextColor.RED)
             ));
@@ -214,12 +216,16 @@ public class AuthListener {
             resolution = CompletableFuture.supplyAsync(() -> premiumResolverService.resolve(username))
                     .orTimeout(3, TimeUnit.SECONDS) // 3 second timeout for premium resolution
                     .exceptionally(throwable -> {
-                        logger.warn("Premium resolution timeout for {}, treating as offline: {}", username, throwable.getMessage());
+                        if (logger.isWarnEnabled()) {
+                            logger.warn("Premium resolution timeout for {}, treating as offline: {}", username, throwable.getMessage());
+                        }
                         return PremiumResolution.offline(username, "VeloAuth-Timeout", "Timeout - fallback to offline");
                     })
                     .join();
         } catch (Exception e) {
-            logger.warn("Premium resolution failed for {}, treating as offline: {}", username, e.getMessage());
+            if (logger.isWarnEnabled()) {
+                logger.warn("Premium resolution failed for {}, treating as offline: {}", username, e.getMessage());
+            }
             resolution = PremiumResolution.offline(username, "VeloAuth-Error", "Error - fallback to offline");
         }
         boolean premium = false;
@@ -318,7 +324,9 @@ public class AuthListener {
             // Sesje powinny być trwałe dla autoryzowanych graczy offline
             // Kończymy tylko przy /logout, timeout lub banie
 
-            logger.debug("Gracz {} rozłączył się - sesja pozostaje aktywna", player.getUsername());
+            if (logger.isDebugEnabled()) {
+                logger.debug("Gracz {} rozłączył się - sesja pozostaje aktywna", player.getUsername());
+            }
 
         } catch (Exception e) {
             logger.error("Błąd podczas obsługi DisconnectEvent dla gracza: {}", event.getPlayer().getUsername(), e);
@@ -511,7 +519,9 @@ public class AuthListener {
                         NamedTextColor.GREEN
                 ));
             } else {
-                logger.debug(AUTH_MARKER, "Gracz {} połączył się z PicoLimbo", player.getUsername());
+                if (logger.isDebugEnabled()) {
+                    logger.debug(AUTH_MARKER, "Gracz {} połączył się z PicoLimbo", player.getUsername());
+                }
 
                 // Wyślij instrukcje logowania
                 player.sendMessage(Component.text(
@@ -614,7 +624,9 @@ public class AuthListener {
             // Jeśli gracz jest online mode (premium), pomijamy weryfikację UUID z bazą
             // Ponieważ premium players nie muszą być w bazie danych
             if (player.isOnlineMode()) {
-                logger.debug("Premium gracz {} - pomijam weryfikację UUID z bazą", player.getUsername());
+                if (logger.isDebugEnabled()) {
+                    logger.debug("Premium gracz {} - pomijam weryfikację UUID z bazą", player.getUsername());
+                }
                 return true;
             }
 
@@ -635,7 +647,9 @@ public class AuthListener {
 
                     var dbPlayer = dbResult.getValue();
                     if (dbPlayer == null) {
-                        logger.debug("Brak UUID w bazie dla gracza {}", player.getUsername());
+                        if (logger.isDebugEnabled()) {
+                            logger.debug("Brak UUID w bazie dla gracza {}", player.getUsername());
+                        }
                         return false;
                     }
 
@@ -654,7 +668,9 @@ public class AuthListener {
 
                     return matches;
                 } catch (Exception e) {
-                    logger.error("Błąd podczas weryfikacji UUID dla gracza: {}", player.getUsername(), e);
+                    if (logger.isErrorEnabled()) {
+                        logger.error("Błąd podczas weryfikacji UUID dla gracza: {}", player.getUsername(), e);
+                    }
                     // Remove from cache for security on any error
                     authCache.removeAuthorizedPlayer(player.getUniqueId());
                     authCache.endSession(player.getUniqueId());
@@ -662,7 +678,9 @@ public class AuthListener {
                 }
             }).join(); // Blokuj do czasu uzyskania wyniku
         } catch (Exception e) {
-            logger.error("Błąd podczas weryfikacji UUID dla gracza: {}", player.getUsername(), e);
+            if (logger.isErrorEnabled()) {
+                logger.error("Błąd podczas weryfikacji UUID dla gracza: {}", player.getUsername(), e);
+            }
             // Remove from cache for security on any error
             authCache.removeAuthorizedPlayer(player.getUniqueId());
             authCache.endSession(player.getUniqueId());

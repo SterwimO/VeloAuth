@@ -2,7 +2,7 @@ package net.rafalohaki.veloauth.constants;
 
 /**
  * Centralized constants for internal system values.
- * 
+ * <p>
  * User-facing messages have been migrated to the Messages i18n system.
  * This file now contains only internal constants that don't need internationalization.
  */

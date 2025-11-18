@@ -20,10 +20,10 @@ public final class VeloAuthValidator {
 
     // Minecraft username validation (official Minecraft username rules)
     private static final Pattern USERNAME_PATTERN = Pattern.compile("^\\w{1,16}$");
-    
+
     // Password validation - allow most characters but limit length and prevent injection
     private static final Pattern PASSWORD_PATTERN = Pattern.compile("^.{3,100}$");
-    
+
     // IP validation handled via InetAddress parsing to reduce regex complexity
 
     private VeloAuthValidator() {
@@ -144,12 +144,12 @@ public final class VeloAuthValidator {
      * Creates a user-friendly error message for validation failures.
      *
      * @param validationResult The validation result
-     * @param inputType The type of input that failed (username, password, etc.)
+     * @param inputType        The type of input that failed (username, password, etc.)
      * @return Component with formatted error message
      */
     public static Component createErrorMessage(ValidationResult validationResult, String inputType) {
         String message = validationResult.getErrorMessage();
-        
+
         // Create user-friendly messages based on input type
         switch (inputType.toLowerCase()) {
             case "username":
@@ -169,7 +169,7 @@ public final class VeloAuthValidator {
                 // Default case for unknown input types - return generic validation error
                 break;
         }
-        
+
         return Component.text(String.format("Błąd walidacji: %s", message), NamedTextColor.RED);
     }
 
@@ -177,10 +177,10 @@ public final class VeloAuthValidator {
      * Logs security validation failures for monitoring.
      *
      * @param validationResult The failed validation result
-     * @param inputType The type of input that failed
-     * @param context Additional context (username, IP, etc.)
-     * @param logger Logger for reporting
-     * @param securityMarker Security marker for categorization
+     * @param inputType        The type of input that failed
+     * @param context          Additional context (username, IP, etc.)
+     * @param logger           Logger for reporting
+     * @param securityMarker   Security marker for categorization
      */
     public static void logValidationFailure(
             ValidationResult validationResult,
@@ -202,16 +202,16 @@ public final class VeloAuthValidator {
     private static boolean hasSuspiciousPatterns(String username) {
         // Check for common attack patterns
         String lowerUsername = username.toLowerCase();
-        
+
         return lowerUsername.contains("drop") || lowerUsername.contains("delete") ||
-               lowerUsername.contains("insert") || lowerUsername.contains("update") ||
-               lowerUsername.contains("select") || lowerUsername.contains("'") ||
-               lowerUsername.contains("\"") || lowerUsername.contains(";") ||
-               lowerUsername.contains("cmd") || lowerUsername.contains("powershell") ||
-               lowerUsername.contains("bash") || lowerUsername.contains("sh") ||
-               lowerUsername.contains("$") || lowerUsername.contains("`") ||
-               lowerUsername.contains("../") || lowerUsername.contains("..\\") ||
-               lowerUsername.contains("/") || lowerUsername.contains("\\");
+                lowerUsername.contains("insert") || lowerUsername.contains("update") ||
+                lowerUsername.contains("select") || lowerUsername.contains("'") ||
+                lowerUsername.contains("\"") || lowerUsername.contains(";") ||
+                lowerUsername.contains("cmd") || lowerUsername.contains("powershell") ||
+                lowerUsername.contains("bash") || lowerUsername.contains("sh") ||
+                lowerUsername.contains("$") || lowerUsername.contains("`") ||
+                lowerUsername.contains("../") || lowerUsername.contains("..\\") ||
+                lowerUsername.contains("/") || lowerUsername.contains("\\");
     }
 
     /**
@@ -222,12 +222,12 @@ public final class VeloAuthValidator {
      */
     private static boolean isCommonWeakPassword(String password) {
         String lowerPassword = password.toLowerCase();
-        
+
         // List of common weak passwords
         String[] weakPasswords = {
-            "123", "1234", "12345", "123456", "password", "qwerty",
-            "abc", "test", "guest", "user", "admin", "root",
-            "pass", "temp", "default", "login", "letmein"
+                "123", "1234", "12345", "123456", "password", "qwerty",
+                "abc", "test", "guest", "user", "admin", "root",
+                "pass", "temp", "default", "login", "letmein"
         };
 
         for (String weak : weakPasswords) {

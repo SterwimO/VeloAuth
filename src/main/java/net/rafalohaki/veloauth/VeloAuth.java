@@ -131,7 +131,7 @@ public class VeloAuth {
                             authCache.clearAll();
                             logger.info("Cleared stale authentication cache entries");
                         }
-                        
+
                         initialized = true;
                         logger.info(messages.get("plugin.initialization.ready"));
                         logStartupInfo();
@@ -168,7 +168,7 @@ public class VeloAuth {
             initializePremiumResolver();
             initializeListeners();
             debugServers();
-            
+
             if (logger.isInfoEnabled()) {
                 logger.info(messages.get("plugin.initialization.components_ready"));
             }

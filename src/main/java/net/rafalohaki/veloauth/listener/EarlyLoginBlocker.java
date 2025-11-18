@@ -36,7 +36,7 @@ public class EarlyLoginBlocker {
     @Subscribe(priority = 100)
     public void onPreLogin(PreLoginEvent event) {
         String username = event.getUsername();
-        
+
         // CRITICAL: Block connections until plugin is fully initialized
         if (!plugin.isInitialized()) {
             logger.warn("🔒 BLOKADA STARTU: Gracz {} próbował połączyć się przed pełną inicjalizacją VeloAuth - blokada EarlyLoginBlocker",

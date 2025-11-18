@@ -15,9 +15,9 @@ import java.util.concurrent.ConcurrentHashMap;
  */
 class TestDatabaseManager extends DatabaseManager {
 
-    private CompletableFuture<Boolean> initResult = CompletableFuture.completedFuture(true);
     private final Map<String, CompletableFuture<DatabaseManager.DbResult<RegisteredPlayer>>> findResults = new ConcurrentHashMap<>();
     private final Map<String, CompletableFuture<DatabaseManager.DbResult<Boolean>>> premiumResults = new ConcurrentHashMap<>();
+    private CompletableFuture<Boolean> initResult = CompletableFuture.completedFuture(true);
 
     TestDatabaseManager(DatabaseConfig config, Messages messages) {
         super(config, messages);

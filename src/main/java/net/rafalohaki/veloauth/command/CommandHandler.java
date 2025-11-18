@@ -36,7 +36,6 @@ public class CommandHandler {
 
     // Stałe dla wiadomości
     private static final String ERROR_DATABASE_QUERY = "error.database.query";
-    private static final String ADMIN_STATS_CACHE_SIZE = "admin.stats.cache_size";
 
     // Markery SLF4J dla kategoryzowanego logowania
     private static final Marker AUTH_MARKER = MarkerFactory.getMarker("AUTH");
@@ -118,7 +117,7 @@ public class CommandHandler {
      * 2. Check brute force protection
      * 3. Fetch player from database with error handling
      *
-     * @param source     Command source
+     * @param source      Command source
      * @param commandName Name of the command for logging
      * @return AuthenticationContext if all checks pass, null otherwise
      */
@@ -133,7 +132,9 @@ public class CommandHandler {
         // Check brute force protection
         if (playerAddress != null && authCache.isBlocked(playerAddress)) {
             player.sendMessage(ValidationUtils.createErrorComponent(messages.get("security.brute_force.blocked")));
-            logger.warn(SECURITY_MARKER, "[BRUTE FORCE BLOCK] IP {} attempted {}", playerAddress.getHostAddress(), commandName);
+            if (logger.isWarnEnabled()) {
+                logger.warn(SECURITY_MARKER, "[BRUTE FORCE BLOCK] IP {} attempted {}", playerAddress.getHostAddress(), commandName);
+            }
             return null;
         }
 
@@ -160,7 +161,9 @@ public class CommandHandler {
         var premiumResult = databaseManager.isPremium(player.getUsername()).join();
 
         if (premiumResult.isDatabaseError()) {
-            logger.error(SECURITY_MARKER, "[DATABASE ERROR] {} failed for {}: {}", operation, player.getUsername(), premiumResult.getErrorMessage());
+            if (logger.isErrorEnabled()) {
+                logger.error(SECURITY_MARKER, "[DATABASE ERROR] {} failed for {}: {}", operation, player.getUsername(), premiumResult.getErrorMessage());
+            }
             player.sendMessage(ValidationUtils.createErrorComponent(messages.get(ERROR_DATABASE_QUERY)));
         }
 
@@ -177,7 +180,9 @@ public class CommandHandler {
      */
     private boolean handleDatabaseError(DatabaseManager.DbResult<?> result, Player player, String operation) {
         if (result.isDatabaseError()) {
-            logger.error(SECURITY_MARKER, "[DATABASE ERROR] {} failed for {}: {}", operation, player.getUsername(), result.getErrorMessage());
+            if (logger.isErrorEnabled()) {
+                logger.error(SECURITY_MARKER, "[DATABASE ERROR] {} failed for {}: {}", operation, player.getUsername(), result.getErrorMessage());
+            }
             player.sendMessage(ValidationUtils.createErrorComponent(messages.get(ERROR_DATABASE_QUERY)));
             return true;
         }
@@ -185,20 +190,10 @@ public class CommandHandler {
     }
 
     /**
-     * Context object for authentication operations to reduce parameter passing.
-     */
-    private static class AuthenticationContext {
-        final Player player;
-        final String username;
-        final InetAddress playerAddress;
-        final RegisteredPlayer registeredPlayer;
-
-        AuthenticationContext(Player player, String username, InetAddress playerAddress, RegisteredPlayer registeredPlayer) {
-            this.player = player;
-            this.username = username;
-            this.playerAddress = playerAddress;
-            this.registeredPlayer = registeredPlayer;
-        }
+         * Context object for authentication operations to reduce parameter passing.
+         */
+        private record AuthenticationContext(Player player, String username, InetAddress playerAddress,
+                                             RegisteredPlayer registeredPlayer) {
     }
 
     /**
@@ -218,7 +213,7 @@ public class CommandHandler {
             }
 
             String password = args[0];
-            
+
             // Asynchroniczne logowanie z Virtual Threads
             CommandHelper.runAsyncCommand(() -> processLogin(source, password),
                     messages, source, ERROR_DATABASE_QUERY);
@@ -226,13 +221,13 @@ public class CommandHandler {
 
         private void processLogin(CommandSource source, String password) {
             Player player = (Player) source;
-            
+
             // Use template method for common checks
             AuthenticationContext authContext = validateAndAuthenticatePlayer(source, COMMAND_LOGIN);
             if (authContext == null) {
                 return;
             }
-            
+
             // Additional login-specific checks
             if (authCache.isPlayerAuthorized(player.getUniqueId(), ValidationUtils.getPlayerIp(player))) {
                 player.sendMessage(ValidationUtils.createSuccessComponent(messages.get("auth.login.already_logged_in")));
@@ -241,7 +236,7 @@ public class CommandHandler {
 
             // Verify password
             BCrypt.Result result = BCrypt.verifyer().verify(password.toCharArray(), authContext.registeredPlayer.getHash());
-            
+
             if (result.verified) {
                 handleSuccessfulLogin(authContext);
             } else {
@@ -265,7 +260,7 @@ public class CommandHandler {
                     return;
                 }
 
-                boolean isPremium = premiumResult.getValue();
+                boolean isPremium = Boolean.TRUE.equals(premiumResult.getValue());
                 CachedAuthUser cachedUser = CachedAuthUser.fromRegisteredPlayer(authContext.registeredPlayer, isPremium);
                 authCache.addAuthorizedPlayer(authContext.player.getUniqueId(), cachedUser);
 
@@ -274,13 +269,17 @@ public class CommandHandler {
                 resetSecurityCounters(authContext.playerAddress);
 
                 authContext.player.sendMessage(ValidationUtils.createSuccessComponent(messages.get("auth.login.success")));
-                logger.info(AUTH_MARKER, "Gracz {} zalogował się pomyślnie z IP {} - sesja rozpoczęta",
-                        authContext.username, ValidationUtils.getPlayerIp(authContext.player));
+                if (logger.isInfoEnabled()) {
+                    logger.info(AUTH_MARKER, "Gracz {} zalogował się pomyślnie z IP {} - sesja rozpoczęta",
+                            authContext.username, ValidationUtils.getPlayerIp(authContext.player));
+                }
 
                 plugin.getConnectionManager().transferToBackend(authContext.player);
 
             } catch (Exception e) {
-                logger.error("Błąd podczas przetwarzania udanego logowania: {}", authContext.username, e);
+                if (logger.isErrorEnabled()) {
+                    logger.error("Błąd podczas przetwarzania udanego logowania: {}", authContext.username, e);
+                }
                 authContext.player.sendMessage(ValidationUtils.createErrorComponent(messages.get(ERROR_DATABASE_QUERY)));
             }
         }
@@ -293,12 +292,16 @@ public class CommandHandler {
 
             if (blocked) {
                 authContext.player.sendMessage(ValidationUtils.createErrorComponent(messages.get("security.brute_force.blocked")));
-                logger.warn("Gracz {} zablokowany za brute force z IP {}",
-                        authContext.username, ValidationUtils.getPlayerIp(authContext.player));
+                if (logger.isWarnEnabled()) {
+                    logger.warn("Gracz {} zablokowany za brute force z IP {}",
+                            authContext.username, ValidationUtils.getPlayerIp(authContext.player));
+                }
             } else {
                 authContext.player.sendMessage(ValidationUtils.createErrorComponent(messages.get("auth.login.incorrect_password")));
-                logger.debug("Nieudana próba logowania gracza {} z IP {}",
-                        authContext.username, ValidationUtils.getPlayerIp(authContext.player));
+                if (logger.isDebugEnabled()) {
+                    logger.debug("Nieudana próba logowania gracza {} z IP {}",
+                            authContext.username, ValidationUtils.getPlayerIp(authContext.player));
+                }
             }
         }
 
@@ -355,7 +358,7 @@ public class CommandHandler {
 
         private void processRegistration(Player player, String password) {
             // Use template method for common checks
-            AuthenticationContext authContext = validateAndAuthenticatePlayer((CommandSource) player, "registration");
+            AuthenticationContext authContext = validateAndAuthenticatePlayer(player, "registration");
             if (authContext == null) {
                 return;
             }
@@ -369,10 +372,10 @@ public class CommandHandler {
             // Create new player
             String hashedPassword = BCrypt.with(BCrypt.Version.VERSION_2Y)
                     .hashToString(settings.getBcryptCost(), password.toCharArray());
-            
+
             RegisteredPlayer newPlayer = new RegisteredPlayer(
-                    authContext.username, hashedPassword, 
-                    ValidationUtils.getPlayerIp(authContext.player), 
+                    authContext.username, hashedPassword,
+                    ValidationUtils.getPlayerIp(authContext.player),
                     authContext.player.getUniqueId().toString()
             );
 
@@ -382,7 +385,7 @@ public class CommandHandler {
                 return;
             }
 
-            boolean saved = saveResult.getValue();
+            boolean saved = Boolean.TRUE.equals(saveResult.getValue());
             if (!saved) {
                 authContext.player.sendMessage(ValidationUtils.createErrorComponent(messages.get(ERROR_DATABASE_QUERY)));
                 return;
@@ -394,7 +397,7 @@ public class CommandHandler {
                 return;
             }
 
-            boolean isPremium = premiumResult.getValue();
+            boolean isPremium = Boolean.TRUE.equals(premiumResult.getValue());
             CachedAuthUser cachedUser = CachedAuthUser.fromRegisteredPlayer(newPlayer, isPremium);
             authCache.addAuthorizedPlayer(authContext.player.getUniqueId(), cachedUser);
             authCache.startSession(authContext.player.getUniqueId(), authContext.username, ValidationUtils.getPlayerIp(authContext.player));
@@ -403,8 +406,10 @@ public class CommandHandler {
             resetSecurityCounters(authContext.playerAddress);
 
             authContext.player.sendMessage(ValidationUtils.createSuccessComponent(messages.get("auth.register.success")));
-            logger.info(AUTH_MARKER, "Gracz {} zarejestrowany pomyślnie z IP {}",
-                    authContext.username, ValidationUtils.getPlayerIp(authContext.player));
+            if (logger.isInfoEnabled()) {
+                logger.info(AUTH_MARKER, "Gracz {} zarejestrowany pomyślnie z IP {}",
+                        authContext.username, ValidationUtils.getPlayerIp(authContext.player));
+            }
 
             plugin.getConnectionManager().transferToBackend(authContext.player);
         }
@@ -456,7 +461,7 @@ public class CommandHandler {
 
         private void processPasswordChange(Player player, String oldPassword, String newPassword) {
             // Use template method for common checks
-            AuthenticationContext authContext = validateAndAuthenticatePlayer((CommandSource) player, "password change");
+            AuthenticationContext authContext = validateAndAuthenticatePlayer(player, "password change");
             if (authContext == null) {
                 return;
             }
@@ -477,15 +482,15 @@ public class CommandHandler {
             // Hash and update password
             String newHashedPassword = BCrypt.with(BCrypt.Version.VERSION_2Y)
                     .hashToString(settings.getBcryptCost(), newPassword.toCharArray());
-            
+
             authContext.registeredPlayer.setHash(newHashedPassword);
             var saveResult = databaseManager.savePlayer(authContext.registeredPlayer).join();
-            
+
             if (handleDatabaseError(saveResult, authContext.player, "Password change save failed for")) {
                 return;
             }
 
-            boolean saved = saveResult.getValue();
+            boolean saved = Boolean.TRUE.equals(saveResult.getValue());
             if (!saved) {
                 authContext.player.sendMessage(ValidationUtils.createErrorComponent(messages.get(ERROR_DATABASE_QUERY)));
                 return;
@@ -493,7 +498,7 @@ public class CommandHandler {
 
             // Handle premium status and session cleanup
             var premiumResult = checkPremiumStatus(authContext.player, "Premium check during password change");
-            if (!premiumResult.isDatabaseError() && premiumResult.getValue()) {
+            if (!premiumResult.isDatabaseError() && Boolean.TRUE.equals(premiumResult.getValue())) {
                 authCache.removePremiumPlayer(authContext.username);
             }
 
@@ -504,13 +509,17 @@ public class CommandHandler {
                     .filter(p -> p.getUsername().equalsIgnoreCase(authContext.username))
                     .forEach(p -> {
                         p.disconnect(ValidationUtils.createWarningComponent(messages.get("general.kick.message")));
-                        logger.warn("Rozłączono duplikat gracza {} - zmiana hasła z IP {}",
-                                authContext.username, ValidationUtils.getPlayerIp(authContext.player));
+                        if (logger.isWarnEnabled()) {
+                            logger.warn("Rozłączono duplikat gracza {} - zmiana hasła z IP {}",
+                                    authContext.username, ValidationUtils.getPlayerIp(authContext.player));
+                        }
                     });
 
             authContext.player.sendMessage(ValidationUtils.createSuccessComponent(messages.get("auth.changepassword.success")));
-            logger.info(AUTH_MARKER, "Gracz {} zmienił hasło z IP {}",
-                    authContext.username, ValidationUtils.getPlayerIp(authContext.player));
+            if (logger.isInfoEnabled()) {
+                logger.info(AUTH_MARKER, "Gracz {} zmienił hasło z IP {}",
+                        authContext.username, ValidationUtils.getPlayerIp(authContext.player));
+            }
         }
     }
 
@@ -569,7 +578,7 @@ public class CommandHandler {
                     return;
                 }
 
-                boolean deleted = deleteResult.getValue();
+                boolean deleted = Boolean.TRUE.equals(deleteResult.getValue());
                 if (deleted) {
                     // Clean up cache and disconnect player
                     authCache.removeAuthorizedPlayer(playerUuid);
@@ -582,8 +591,8 @@ public class CommandHandler {
                     });
 
                     CommandHelper.sendSuccess(source, "Konto gracza " + nickname + " zostało usunięte!");
-                    logger.info(AUTH_MARKER, "Administrator {} usunął konto gracza {}",
-                            source instanceof Player ? ((Player) source).getUsername() : "CONSOLE", nickname);
+                    String adminName = source instanceof Player player ? player.getUsername() : "CONSOLE";
+                    logger.info(AUTH_MARKER, "Administrator {} usunął konto gracza {}", adminName, nickname);
 
                 } else {
                     CommandHelper.sendError(source, messages, ERROR_DATABASE_QUERY);
@@ -663,32 +672,36 @@ public class CommandHandler {
                     }
                 }
                 case "stats" -> {
-                    var cacheStats = authCache.getStats();
-                    CommandHelper.sendWarning(source, messages.get("admin.stats.header"));
-
                     var totalF = databaseManager.getTotalRegisteredAccounts();
                     var premiumF = databaseManager.getTotalPremiumAccounts();
                     var nonPremiumF = databaseManager.getTotalNonPremiumAccounts();
 
+                    // Wait for all database operations to complete
                     java.util.concurrent.CompletableFuture.allOf(totalF, premiumF, nonPremiumF).join();
                     int total = totalF.join();
                     int premium = premiumF.join();
                     int nonPremium = nonPremiumF.join();
                     double pct = total > 0 ? (premium * 100.0 / total) : 0.0;
 
-                    CommandHelper.sendWarning(source, messages.get("admin.stats.total_accounts", total));
-                    CommandHelper.sendWarning(source, messages.get("admin.stats.premium_accounts", premium));
-                    CommandHelper.sendWarning(source, messages.get("admin.stats.nonpremium_accounts", nonPremium));
-                    CommandHelper.sendWarning(source, messages.get("admin.stats.premium_percentage", pct));
-
-                    // Cache stats
-                    CommandHelper.sendWarning(source, messages.get(ADMIN_STATS_CACHE_SIZE, cacheStats.authorizedPlayersCount()));
-                    CommandHelper.sendWarning(source, messages.get(ADMIN_STATS_CACHE_SIZE, cacheStats.premiumCacheCount()));
-                    CommandHelper.sendWarning(source, messages.get(ADMIN_STATS_CACHE_SIZE, databaseManager.getCacheSize()));
-
-                    // Database status
+                    // Get cache stats AFTER database operations complete
+                    var cacheStats = authCache.getStats();
+                    int dbCacheSize = databaseManager.getCacheSize();
                     String dbStatus = databaseManager.isConnected() ? messages.get("database.connected") : messages.get("database.disconnected");
-                    CommandHelper.sendWarning(source, messages.get("admin.stats.database_status", (Object) dbStatus));
+
+                    // Build complete stats message in fixed order
+                    StringBuilder statsMessage = new StringBuilder();
+                    statsMessage.append(messages.get("admin.stats.header")).append("\n");
+                    statsMessage.append(messages.get("admin.stats.premium_accounts", premium)).append("\n");
+                    statsMessage.append(messages.get("admin.stats.nonpremium_accounts", nonPremium)).append("\n");
+                    statsMessage.append(messages.get("admin.stats.total_accounts", total)).append("\n");
+                    statsMessage.append(messages.get("admin.stats.premium_percentage", pct)).append("\n");
+                    statsMessage.append(messages.get("admin.stats.authorized_players", cacheStats.authorizedPlayersCount())).append("\n");
+                    statsMessage.append(messages.get("admin.stats.premium_cache", cacheStats.premiumCacheCount())).append("\n");
+                    statsMessage.append(messages.get("admin.stats.database_cache", dbCacheSize)).append("\n");
+                    statsMessage.append(messages.get("admin.stats.database_status", (Object) dbStatus));
+
+                    // Send complete message as single component
+                    CommandHelper.sendWarning(source, statsMessage.toString());
                 }
                 default -> sendAdminHelp(source);
             }

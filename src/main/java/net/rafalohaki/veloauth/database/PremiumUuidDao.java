@@ -83,7 +83,9 @@ public class PremiumUuidDao {
                 return Optional.empty();
             }
 
-            logger.debug(DB_MARKER, "Znaleziono premium UUID dla {}: {}", uuid, result.getNickname());
+            if (logger.isDebugEnabled()) {
+                logger.debug(DB_MARKER, "Znaleziono premium UUID dla {}: {}", uuid, result.getNickname());
+            }
             return Optional.of(result);
 
         } catch (SQLException e) {

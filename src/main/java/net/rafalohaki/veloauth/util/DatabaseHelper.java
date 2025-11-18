@@ -1,8 +1,8 @@
 package net.rafalohaki.veloauth.util;
 
 import net.rafalohaki.veloauth.database.DatabaseManager;
-import net.rafalohaki.veloauth.model.RegisteredPlayer;
 import net.rafalohaki.veloauth.i18n.Messages;
+import net.rafalohaki.veloauth.model.RegisteredPlayer;
 import org.slf4j.Logger;
 import org.slf4j.Marker;
 
@@ -27,10 +27,10 @@ public final class DatabaseHelper {
      * fail-secure behavior and consistent logging.
      *
      * @param databaseManager Database manager instance
-     * @param nickname Player nickname to search for
-     * @param logger Logger for error reporting
-     * @param marker Optional marker for categorized logging
-     * @param messages Messages instance for error message generation
+     * @param nickname        Player nickname to search for
+     * @param logger          Logger for error reporting
+     * @param marker          Optional marker for categorized logging
+     * @param messages        Messages instance for error message generation
      * @return CompletableFuture containing the registered player or null if not found
      */
     public static CompletableFuture<RegisteredPlayer> findPlayerByNickname(
@@ -72,9 +72,9 @@ public final class DatabaseHelper {
      * Simplified version without marker for backward compatibility.
      *
      * @param databaseManager Database manager instance
-     * @param nickname Player nickname to search for
-     * @param logger Logger for error reporting
-     * @param messages Messages instance for error message generation
+     * @param nickname        Player nickname to search for
+     * @param logger          Logger for error reporting
+     * @param messages        Messages instance for error message generation
      * @return CompletableFuture containing the registered player or null if not found
      */
     public static CompletableFuture<RegisteredPlayer> findPlayerByNickname(
@@ -86,13 +86,13 @@ public final class DatabaseHelper {
     /**
      * Validates database operation result with centralized error handling.
      *
-     * @param dbResult Database result to validate
+     * @param dbResult  Database result to validate
      * @param operation Operation description for error logging
-     * @param logger Logger for error reporting
-     * @param marker Optional marker for categorized logging
-     * @param messages Messages instance for error message generation
-     * @param context Additional context information
-     * @param <T> Result type
+     * @param logger    Logger for error reporting
+     * @param marker    Optional marker for categorized logging
+     * @param messages  Messages instance for error message generation
+     * @param context   Additional context information
+     * @param <T>       Result type
      * @return The value if successful, null if database error occurred
      */
     public static <T> T validateDbResult(
@@ -120,12 +120,12 @@ public final class DatabaseHelper {
     /**
      * Simplified version without marker for backward compatibility.
      *
-     * @param dbResult Database result to validate
+     * @param dbResult  Database result to validate
      * @param operation Operation description for error logging
-     * @param logger Logger for error reporting
-     * @param messages Messages instance for error message generation
-     * @param context Additional context information
-     * @param <T> Result type
+     * @param logger    Logger for error reporting
+     * @param messages  Messages instance for error message generation
+     * @param context   Additional context information
+     * @param <T>       Result type
      * @return The value if successful, null if database error occurred
      */
     public static <T> T validateDbResult(

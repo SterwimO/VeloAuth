@@ -17,6 +17,7 @@ import org.slf4j.Marker;
 import org.slf4j.MarkerFactory;
 
 import java.sql.SQLException;
+import java.util.Collection;
 import java.util.List;
 import java.util.concurrent.*;
 import java.util.concurrent.locks.ReentrantLock;
@@ -33,43 +34,15 @@ public class DatabaseManager {
 
     // Stałe dla wiadomości bazy danych
     private static final String DATABASE_ERROR = "database.error";
-    
+
     // Stałe dla zapytań SQL
     private static final String ALTER_TABLE = "ALTER TABLE ";
     private static final String ADD_COLUMN = " ADD COLUMN ";
-    
+
     // Stałe dla nazw tabel i kolumn - używane w innych metodach
     private static final String AUTH_TABLE = "AUTH";
     private static final String WHERE_CLAUSE = " WHERE ";
-    
-    // Predefined SQL query templates for security - no dynamic concatenation at execution time
-    private static final String TOTAL_ACCOUNTS_QUERY_POSTGRESQL = 
-        "SELECT COUNT(DISTINCT uuid) FROM (" +
-        " SELECT \"UUID\" AS uuid FROM \"AUTH\" WHERE \"UUID\" IS NOT NULL " +
-        " UNION " +
-        " SELECT \"UUID\" AS uuid FROM \"PREMIUM_UUIDS\"" +
-        ") AS combined_uuids";
-        
-    private static final String TOTAL_ACCOUNTS_QUERY_OTHER = 
-        "SELECT COUNT(DISTINCT uuid) FROM (" +
-        " SELECT UUID AS uuid FROM AUTH WHERE UUID IS NOT NULL " +
-        " UNION " +
-        " SELECT UUID AS uuid FROM PREMIUM_UUIDS" +
-        ") AS combined_uuids";
-        
-    private static final String PREMIUM_ACCOUNTS_QUERY_POSTGRESQL = 
-        "SELECT COUNT(DISTINCT uuid) FROM (" +
-        " SELECT \"UUID\" AS uuid FROM \"AUTH\" WHERE \"HASH\" IS NULL " +
-        " UNION " +
-        " SELECT \"UUID\" AS uuid FROM \"PREMIUM_UUIDS\"" +
-        ") AS premium";
-        
-    private static final String PREMIUM_ACCOUNTS_QUERY_OTHER = 
-        "SELECT COUNT(DISTINCT uuid) FROM (" +
-        " SELECT UUID AS uuid FROM AUTH WHERE HASH IS NULL " +
-        " UNION " +
-        " SELECT UUID AS uuid FROM PREMIUM_UUIDS" +
-        ") AS premium";
+
 
     // Markery SLF4J dla kategoryzowanego logowania
     private static final Marker DB_MARKER = MarkerFactory.getMarker("DATABASE");
@@ -171,22 +144,10 @@ public class DatabaseManager {
             try {
                 databaseLock.lock();
                 try {
-                    if (isAlreadyConnected()) {
-                        return true;
-                    }
-
-                    initializeConnection();
-                    initializeDaos();
-                    createTablesIfNotExists();
-                    markAsConnected();
-                    startHealthChecks();
-
-                    return true;
-
+                    return performDatabaseInitialization();
                 } finally {
                     databaseLock.unlock();
                 }
-
             } catch (SQLException e) {
                 if (logger.isErrorEnabled()) {
                     logger.error(DB_MARKER, "Błąd podczas inicjalizacji bazy danych", e);
@@ -194,6 +155,20 @@ public class DatabaseManager {
                 return false;
             }
         }, dbExecutor);
+    }
+
+    private boolean performDatabaseInitialization() throws SQLException {
+        if (isAlreadyConnected()) {
+            return true;
+        }
+
+        initializeConnection();
+        initializeDaos();
+        createTablesIfNotExists();
+        markAsConnected();
+        startHealthChecks();
+
+        return true;
     }
 
     private boolean isAlreadyConnected() {
@@ -305,7 +280,7 @@ public class DatabaseManager {
         healthCheckExecutor.scheduleAtFixedRate(() -> {
             try {
                 performHealthCheck();
-            } catch (Exception e) {
+            } catch (RuntimeException e) {
                 if (logger.isErrorEnabled()) {
                     logger.error(DB_MARKER, "Błąd podczas health check bazy danych", e);
                 }
@@ -346,7 +321,7 @@ public class DatabaseManager {
                 }
             }
 
-        } catch (Exception e) {
+        } catch (RuntimeException e) {
             lastHealthCheckTime = System.currentTimeMillis();
             lastHealthCheckPassed = false;
             // Don't set connected=false for health check exceptions
@@ -381,39 +356,15 @@ public class DatabaseManager {
     public void shutdown() {
         try {
             // Zatrzymaj health checks najpierw
-            if (healthCheckExecutor != null && !healthCheckExecutor.isShutdown()) {
-                healthCheckExecutor.shutdown();
-                try {
-                    if (!healthCheckExecutor.awaitTermination(5, TimeUnit.SECONDS)) {
-                        healthCheckExecutor.shutdownNow();
-                    }
-                } catch (InterruptedException e) {
-                    healthCheckExecutor.shutdownNow();
-                    Thread.currentThread().interrupt();
-                }
-                if (logger.isInfoEnabled()) {
-                    logger.info(DB_MARKER, "Health checks zatrzymane");
-                }
-            }
+            stopHealthChecks();
 
             databaseLock.lock();
             try {
-                if (connectionSource != null) {
-                    connectionSource.close();
-                    connectionSource = null;
-                    if (logger.isInfoEnabled()) {
-                        logger.info(DB_MARKER, messages.get("database.manager.connection_closed"));
-                    }
-                }
-                connected = false;
-                playerCache.clear();
-                if (logger.isDebugEnabled()) {
-                    logger.debug(CACHE_MARKER, "Cache graczy wyczyszczony");
-                }
+                closeConnectionResources();
             } finally {
                 databaseLock.unlock();
             }
-        } catch (Exception e) {
+        } catch (RuntimeException e) {
             if (logger.isErrorEnabled()) {
                 logger.error(DB_MARKER, "Błąd podczas zamykania bazy danych", e);
             }
@@ -422,10 +373,48 @@ public class DatabaseManager {
         }
     }
 
+    private void stopHealthChecks() {
+        if (healthCheckExecutor != null && !healthCheckExecutor.isShutdown()) {
+            healthCheckExecutor.shutdown();
+            try {
+                if (!healthCheckExecutor.awaitTermination(5, TimeUnit.SECONDS)) {
+                    healthCheckExecutor.shutdownNow();
+                }
+            } catch (InterruptedException e) {
+                healthCheckExecutor.shutdownNow();
+                Thread.currentThread().interrupt();
+            }
+            if (logger.isInfoEnabled()) {
+                logger.info(DB_MARKER, "Health checks zatrzymane");
+            }
+        }
+    }
+
+    private void closeConnectionResources() {
+        if (connectionSource != null) {
+            try {
+                connectionSource.close();
+            } catch (Exception e) {
+                if (logger.isErrorEnabled()) {
+                    logger.error(DB_MARKER, "Error closing database connection", e);
+                }
+            }
+            connectionSource = null;
+            if (logger.isInfoEnabled()) {
+                logger.info(DB_MARKER, messages.get("database.manager.connection_closed"));
+            }
+        }
+        connected = false;
+        playerCache.clear();
+        if (logger.isDebugEnabled()) {
+            logger.debug(CACHE_MARKER, "Cache graczy wyczyszczony");
+        }
+    }
+
     /**
      * Znajduje gracza po lowercase nickname z wykorzystaniem cache + natywnego JDBC.
      * Zwraca DbResult dla rozróżnienia między "nie znaleziono" a "błąd bazy danych".
-     * 
+     * <p>
      * CRITICAL FIX: Ensure cache key consistency by always normalizing to lowercase
      * to prevent race conditions when switching between accounts rapidly.
      */
@@ -435,7 +424,7 @@ public class DatabaseManager {
         }
 
         String normalizedNickname = nickname.toLowerCase();
-        
+
         return CompletableFuture.supplyAsync(() -> {
             DbResult<RegisteredPlayer> cacheResult = checkCache(normalizedNickname);
             if (cacheResult != null) {
@@ -505,7 +494,7 @@ public class DatabaseManager {
             }
         } else {
             if (logger.isWarnEnabled()) {
-                logger.warn(CACHE_MARKER, "Database inconsistency for {} - expected {}, found {}", 
+                logger.warn(CACHE_MARKER, "Database inconsistency for {} - expected {}, found {}",
                         normalizedNickname, normalizedNickname, player.getLowercaseNickname());
             }
         }
@@ -712,49 +701,7 @@ public class DatabaseManager {
      * @return true jeśli połączona
      */
     public boolean isConnected() {
-        return connected;
-    }
-
-    /**
-     * Zwraca całkowitą liczbę unikalnych kont (AUTH ∪ PREMIUM_UUIDS).
-     */
-    public CompletableFuture<Integer> getTotalRegisteredAccounts() {
-        return CompletableFuture.supplyAsync(() -> {
-            if (!isConnected()) {
-                logDatabaseNotConnected();
-                return 0;
-            }
-            try {
-                String sql = buildTotalAccountsQuery();
-                return executeCountQuery(sql);
-            } catch (SQLException e) {
-                if (logger.isErrorEnabled()) {
-                    logger.error(DB_MARKER, "Error counting total accounts", e);
-                }
-                return 0;
-            }
-        }, dbExecutor);
-    }
-
-    /**
-     * Zwraca liczbę kont premium (AUTH z HASH NULL ∪ PREMIUM_UUIDS).
-     */
-    public CompletableFuture<Integer> getTotalPremiumAccounts() {
-        return CompletableFuture.supplyAsync(() -> {
-            if (!isConnected()) {
-                logDatabaseNotConnected();
-                return 0;
-            }
-            try {
-                String sql = buildPremiumAccountsQuery();
-                return executeCountQuery(sql);
-            } catch (SQLException e) {
-                if (logger.isErrorEnabled()) {
-                    logger.error(DB_MARKER, "Error counting premium accounts", e);
-                }
-                return 0;
-            }
-        }, dbExecutor);
+        return isHealthy();
     }
 
     /**
@@ -771,19 +718,7 @@ public class DatabaseManager {
                 String hash = postgres ? "\"HASH\"" : "HASH";
                 String sql = "SELECT COUNT(*) FROM " + auth + WHERE_CLAUSE + hash + " IS NOT NULL";
 
-                DatabaseConnection dbConnection = connectionSource.getReadWriteConnection(null);
-                try {
-                    java.sql.Connection connection = dbConnection.getUnderlyingConnection();
-                    try (java.sql.Statement stmt = connection.createStatement();
-                         java.sql.ResultSet rs = stmt.executeQuery(sql)) {
-                        if (rs.next()) {
-                            return rs.getInt(1);
-                        }
-                        return 0;
-                    }
-                } finally {
-                    connectionSource.releaseConnection(dbConnection);
-                }
+                return executeCountQuery(sql);
             } catch (SQLException e) {
                 if (logger.isErrorEnabled()) {
                     logger.error(DB_MARKER, "Error counting non-premium accounts", e);
@@ -791,6 +726,54 @@ public class DatabaseManager {
                 return 0;
             }
         }, dbExecutor);
+    }
+
+    @SuppressWarnings("java:S2077") // Safe: predefined templates only
+    private int executeCountQuery(String sql) throws SQLException {
+        DatabaseConnection dbConnection = connectionSource.getReadWriteConnection(null);
+        try {
+            java.sql.Connection connection = dbConnection.getUnderlyingConnection();
+            try (java.sql.Statement stmt = connection.createStatement();
+                 java.sql.ResultSet rs = stmt.executeQuery(sql)) {
+                if (rs.next()) {
+                    return rs.getInt(1);
+                }
+                return 0;
+            }
+        } finally {
+            connectionSource.releaseConnection(dbConnection);
+        }
+    }
+
+    /**
+     * Zwraca liczbę wszystkich zarejestrowanych kont.
+     * Simple implementation using getAllPlayers() to avoid complex SQL queries.
+     */
+    public CompletableFuture<Integer> getTotalRegisteredAccounts() {
+        return getAllPlayers().thenApply(Collection::size)
+                .exceptionally(e -> {
+                    if (logger.isErrorEnabled()) {
+                        logger.error(DB_MARKER, "Error getting total registered accounts", e);
+                    }
+                    return 0;
+                });
+    }
+
+    /**
+     * Zwraca liczbę kont premium.
+     * Simple implementation using existing data to avoid complex SQL queries.
+     */
+    public CompletableFuture<Integer> getTotalPremiumAccounts() {
+        return getAllPlayers().thenApply(players ->
+                (int) players.stream()
+                        .filter(player -> player.getPremiumUuid() != null || player.getHash() == null)
+                        .count()
+        ).exceptionally(e -> {
+            if (logger.isErrorEnabled()) {
+                logger.error(DB_MARKER, "Error getting total premium accounts", e);
+            }
+            return 0;
+        });
     }
 
     /**
@@ -841,26 +824,22 @@ public class DatabaseManager {
      * Dodaje brakujące kolumny: PREMIUMUUID, TOTPTOKEN, ISSUEDTIME.
      */
     private void migrateAuthTableForLimboauth() throws SQLException {
+        DatabaseConnection dbConnection = connectionSource.getReadWriteConnection(null);
         try {
-            DatabaseConnection dbConnection = connectionSource.getReadWriteConnection(null);
-            try {
-                java.sql.Connection connection = dbConnection.getUnderlyingConnection();
-                ColumnMigrationResult migrationResult = checkExistingColumns(connection);
-                DatabaseType dbType = DatabaseType.fromName(config.getStorageType());
-                String quote = dbType == DatabaseType.POSTGRESQL ? "\"" : "`";
-
-                addMissingColumns(connection, migrationResult, quote);
-                logMigrationComplete(migrationResult);
-
-            } finally {
-                connectionSource.releaseConnection(dbConnection);
-            }
-        } catch (SQLException e) {
-            if (logger.isErrorEnabled()) {
-                logger.error(DB_MARKER, "Błąd podczas migracji tabeli AUTH dla limboauth", e);
-            }
-            throw e;
+            performColumnMigration(dbConnection);
+        } finally {
+            connectionSource.releaseConnection(dbConnection);
         }
+    }
+
+    private void performColumnMigration(DatabaseConnection dbConnection) throws SQLException {
+        java.sql.Connection connection = dbConnection.getUnderlyingConnection();
+        ColumnMigrationResult migrationResult = checkExistingColumns(connection);
+        DatabaseType dbType = DatabaseType.fromName(config.getStorageType());
+        String quote = dbType == DatabaseType.POSTGRESQL ? "\"" : "`";
+
+        addMissingColumns(connection, migrationResult, quote);
+        logMigrationComplete(migrationResult);
     }
 
     private ColumnMigrationResult checkExistingColumns(java.sql.Connection connection) throws SQLException {
@@ -895,18 +874,6 @@ public class DatabaseManager {
     private void logMigrationComplete(ColumnMigrationResult result) {
         if (logger.isInfoEnabled() && (!result.hasPremiumUuid || !result.hasTotpToken || !result.hasIssuedTime)) {
             logger.info(DB_MARKER, "Migracja schematu AUTH dla limboauth zakończona");
-        }
-    }
-
-    private static class ColumnMigrationResult {
-        final boolean hasPremiumUuid;
-        final boolean hasTotpToken;
-        final boolean hasIssuedTime;
-
-        ColumnMigrationResult(boolean hasPremiumUuid, boolean hasTotpToken, boolean hasIssuedTime) {
-            this.hasPremiumUuid = hasPremiumUuid;
-            this.hasTotpToken = hasTotpToken;
-            this.hasIssuedTime = hasIssuedTime;
         }
     }
 
@@ -973,6 +940,9 @@ public class DatabaseManager {
                 }
             }
         }
+    }
+
+    private record ColumnMigrationResult(boolean hasPremiumUuid, boolean hasTotpToken, boolean hasIssuedTime) {
     }
 
     /**
@@ -1066,68 +1036,5 @@ public class DatabaseManager {
         public boolean isSuccess() {
             return !isDatabaseError;
         }
-    }
-    
-    // Helper methods to reduce cognitive complexity and eliminate code duplication
-    
-    /**
-     * Loguje ostrzeżenie o braku połączenia z bazą danych.
-     */
-    private void logDatabaseNotConnected() {
-        if (logger.isWarnEnabled()) {
-            logger.warn(DB_MARKER, DATABASE_NOT_CONNECTED);
-        }
-    }
-    
-    /**
-     * Sprawdza czy używamy PostgreSQL.
-     */
-    private boolean isPostgreSQL() {
-        return DatabaseType.POSTGRESQL.getName().equalsIgnoreCase(config.getStorageType());
-    }
-    
-    
-    
-    /**
-     * Wykonuje zapytanie COUNT i zwraca wynik.
-     * 
-     * SECURITY: Uses predefined query templates with no user input.
-     * SQL queries are built from hardcoded constants only, eliminating injection risks.
-     */
-    @SuppressWarnings("java:S2077") // Safe: predefined templates only, no user input
-    private int executeCountQuery(String sql) throws SQLException {
-        DatabaseConnection dbConnection = connectionSource.getReadWriteConnection(null);
-        try {
-            java.sql.Connection connection = dbConnection.getUnderlyingConnection();
-            try (java.sql.Statement stmt = connection.createStatement();
-                 java.sql.ResultSet rs = stmt.executeQuery(sql)) {
-                if (rs.next()) {
-                    return rs.getInt(1);
-                }
-                return 0;
-            }
-        } finally {
-            connectionSource.releaseConnection(dbConnection);
-        }
-    }
-    
-    /**
-     * Buduje zapytanie SQL do liczenia wszystkich kont.
-     * 
-     * SECURITY: Uses predefined query templates - no dynamic concatenation at execution time.
-     * This eliminates SQL injection risks while supporting multiple database types.
-     */
-    private String buildTotalAccountsQuery() {
-        return isPostgreSQL() ? TOTAL_ACCOUNTS_QUERY_POSTGRESQL : TOTAL_ACCOUNTS_QUERY_OTHER;
-    }
-    
-    /**
-     * Buduje zapytanie SQL do liczenia kont premium.
-     * 
-     * SECURITY: Uses predefined query templates - no dynamic concatenation at execution time.
-     * This eliminates SQL injection risks while supporting multiple database types.
-     */
-    private String buildPremiumAccountsQuery() {
-        return isPostgreSQL() ? PREMIUM_ACCOUNTS_QUERY_POSTGRESQL : PREMIUM_ACCOUNTS_QUERY_OTHER;
     }
 }

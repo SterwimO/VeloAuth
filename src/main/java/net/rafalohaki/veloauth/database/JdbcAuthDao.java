@@ -161,7 +161,9 @@ public final class JdbcAuthDao {
                 }
             }
         } catch (SQLException e) {
-            logger.debug("Health check failed: {}", e.getMessage());
+            if (logger.isDebugEnabled()) {
+                logger.debug("Health check failed: {}", e.getMessage());
+            }
             return false;
         }
     }
@@ -211,16 +213,19 @@ public final class JdbcAuthDao {
 
     private RegisteredPlayer mapPlayer(ResultSet resultSet) throws SQLException {
         RegisteredPlayer player = new RegisteredPlayer();
+        String nickname = null;
         try {
-            String nickname = resultSet.getString("NICKNAME");
+            nickname = resultSet.getString("NICKNAME");
             if (nickname != null && !nickname.isEmpty()) {
                 player.setNickname(nickname);
             }
         } catch (IllegalArgumentException e) {
-            logger.warn("Nieprawidłowy nickname w bazie danych", e);
-            throw new SQLException("Invalid nickname stored in database", e);
+            if (logger.isWarnEnabled()) {
+                logger.warn("Nieprawidłowy nickname w bazie danych", e);
+            }
+            throw new SQLException("Invalid nickname stored in database for player: " + nickname, e);
         }
-        
+
         // Hash może być null dla graczy premium (limboauth compatibility)
         player.setHash(resultSet.getString("HASH"));
         player.setIp(resultSet.getString("IP"));
@@ -228,12 +233,12 @@ public final class JdbcAuthDao {
         player.setUuid(resultSet.getString("UUID"));
         player.setRegDate(resultSet.getLong("REGDATE"));
         player.setLoginDate(resultSet.getLong("LOGINDATE"));
-        
+
         // Limboauth compatibility columns
         player.setPremiumUuid(resultSet.getString("PREMIUMUUID"));
         player.setTotpToken(resultSet.getString("TOTPTOKEN"));
         player.setIssuedTime(resultSet.getLong("ISSUEDTIME"));
-        
+
         return player;
     }
 

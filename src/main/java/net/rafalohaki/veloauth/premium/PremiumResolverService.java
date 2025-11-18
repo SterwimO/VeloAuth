@@ -34,9 +34,9 @@ public class PremiumResolverService {
         this.dao = Objects.requireNonNull(premiumUuidDao, "premiumUuidDao");
 
         // Debug logging to check actual resolver settings
-        logger.info("[PremiumResolver] Config - Mojang: {}, Ashcon: {}, Wpme: {}", 
-                resolverSettings.isMojangEnabled(), 
-                resolverSettings.isAshconEnabled(), 
+        logger.info("[PremiumResolver] Config - Mojang: {}, Ashcon: {}, Wpme: {}",
+                resolverSettings.isMojangEnabled(),
+                resolverSettings.isAshconEnabled(),
                 resolverSettings.isWpmeEnabled());
 
         int timeoutMs = Math.max(100, resolverSettings.getRequestTimeoutMs());

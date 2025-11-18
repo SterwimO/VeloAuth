@@ -112,20 +112,26 @@ public class ConnectionManager {
 
                 if (cachedUser != null && cachedUser.matchesIp(playerIp)) {
                     // Cache HIT - gracz jest autoryzowany
-                    logger.debug("Cache HIT dla gracza {} - transfer na backend", player.getUsername());
+                    if (logger.isDebugEnabled()) {
+                        logger.debug("Cache HIT dla gracza {} - transfer na backend", player.getUsername());
+                    }
 
                     // Weryfikuj z bazą danych dla bezpieczeństwa
                     return verifyAndTransferToBackend(player, cachedUser);
 
                 } else {
                     // Cache MISS - gracz musi się zalogować
-                    logger.debug("Cache MISS dla gracza {} - transfer na PicoLimbo", player.getUsername());
+                    if (logger.isDebugEnabled()) {
+                        logger.debug("Cache MISS dla gracza {} - transfer na PicoLimbo", player.getUsername());
+                    }
 
                     return transferToPicoLimbo(player);
                 }
 
             } catch (Exception e) {
-                logger.error("Błąd podczas obsługi połączenia gracza: {}", player.getUsername(), e);
+                if (logger.isErrorEnabled()) {
+                    logger.error("Błąd podczas obsługi połączenia gracza: {}", player.getUsername(), e);
+                }
 
                 player.disconnect(Component.text(
                         "Wystąpił błąd podczas łączenia. Spróbuj ponownie.",
@@ -218,7 +224,9 @@ public class ConnectionManager {
             return transferToBackend(player);
 
         } catch (Exception e) {
-            logger.error("Błąd podczas weryfikacji gracza: {}", player.getUsername(), e);
+            if (logger.isErrorEnabled()) {
+                logger.error("Błąd podczas weryfikacji gracza: {}", player.getUsername(), e);
+            }
             return transferToPicoLimbo(player);
         }
     }
@@ -256,25 +264,33 @@ public class ConnectionManager {
                     .thenAccept(dbResult -> {
                         // CRITICAL: Handle DbResult properly - don't unwrap incorrectly
                         if (dbResult.isDatabaseError()) {
-                            logger.warn("Database error while checking account for {}: {}", 
-                                    player.getUsername(), dbResult.getErrorMessage());
+                            if (logger.isWarnEnabled()) {
+                                logger.warn("Database error while checking account for {}: {}",
+                                        player.getUsername(), dbResult.getErrorMessage());
+                            }
                             sendGenericAuthMessage(player);
                             return;
                         }
-                        
+
                         RegisteredPlayer existingPlayer = dbResult.getValue();
                         if (existingPlayer != null) {
                             // Konto istnieje - pokazuj komunikat logowania
                             sendLoginMessage(player);
-                            logger.debug("Wykryto istniejące konto dla {} - pokazano komunikat logowania", player.getUsername());
+                            if (logger.isDebugEnabled()) {
+                                logger.debug("Wykryto istniejące konto dla {} - pokazano komunikat logowania", player.getUsername());
+                            }
                         } else {
                             // Konto nie istnieje - pokazuj komunikat rejestracji
                             sendRegisterMessage(player);
-                            logger.debug("Wykryto nowe konto dla {} - pokazano komunikat rejestracji", player.getUsername());
+                            if (logger.isDebugEnabled()) {
+                                logger.debug("Wykryto nowe konto dla {} - pokazano komunikat rejestracji", player.getUsername());
+                            }
                         }
                     })
                     .exceptionally(throwable -> {
-                        logger.warn("Błąd podczas sprawdzania konta dla {}: {}", player.getUsername(), throwable.getMessage());
+                        if (logger.isWarnEnabled()) {
+                            logger.warn("Błąd podczas sprawdzania konta dla {}: {}", player.getUsername(), throwable.getMessage());
+                        }
                         // Fallback do generycznego komunikatu w przypadku błędu
                         sendGenericAuthMessage(player);
                         return null;
@@ -285,15 +301,19 @@ public class ConnectionManager {
                     .orTimeout(10, TimeUnit.SECONDS)
                     .whenComplete((result, throwable) -> {
                         if (throwable != null) {
-                            logger.error("Krytyczny błąd w operacji wiadomości dla {}: {}",
-                                    player.getUsername(), throwable.getMessage(), throwable);
+                            if (logger.isErrorEnabled()) {
+                                logger.error("Krytyczny błąd w operacji wiadomości dla {}: {}",
+                                        player.getUsername(), throwable.getMessage(), throwable);
+                            }
                         }
                     }).join();  // Wait for message to complete before transfer
 
             return executePicoLimboTransfer(player, targetServer);
 
         } catch (Exception e) {
-            logger.error("Krytyczny błąd podczas próby transferu gracza na PicoLimbo: {}", player.getUsername(), e);
+            if (logger.isErrorEnabled()) {
+                logger.error("Krytyczny błąd podczas próby transferu gracza na PicoLimbo: {}", player.getUsername(), e);
+            }
 
             disconnectWithError(player, "Wystąpił krytyczny błąd podczas łączenia z serwerem autoryzacji.");
             return false;
@@ -492,10 +512,14 @@ public class ConnectionManager {
                     NamedTextColor.YELLOW
             ));
 
-            logger.info("Wymuszono ponowną autoryzację gracza: {}", player.getUsername());
+            if (logger.isInfoEnabled()) {
+                logger.info("Wymuszono ponowną autoryzację gracza: {}", player.getUsername());
+            }
 
         } catch (Exception e) {
-            logger.error("Błąd podczas wymuszania ponownej autoryzacji: {}", player.getUsername(), e);
+            if (logger.isErrorEnabled()) {
+                logger.error("Błąd podczas wymuszania ponownej autoryzacji: {}", player.getUsername(), e);
+            }
         }
     }
 

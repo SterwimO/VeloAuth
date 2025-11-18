@@ -102,7 +102,9 @@ public class Messages {
             try {
                 return MessageFormat.format(message, args);
             } catch (IllegalArgumentException e) {
-                logger.warn("Failed to format message '{}': {}", key, e.getMessage());
+                if (logger.isWarnEnabled()) {
+                    logger.warn("Failed to format message '{}': {}", key, e.getMessage());
+                }
                 return message;
             }
         }

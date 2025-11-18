@@ -27,10 +27,10 @@ public final class VeloAuthErrorHandler {
      *
      * @param throwable The exception that occurred
      * @param operation The operation being performed (for logging)
-     * @param logger The logger to use for error reporting
-     * @param marker Optional marker for categorized logging
-     * @param messages Messages instance for error message generation
-     * @param context Additional context information (username, player info, etc.)
+     * @param logger    The logger to use for error reporting
+     * @param marker    Optional marker for categorized logging
+     * @param messages  Messages instance for error message generation
+     * @param context   Additional context information (username, player info, etc.)
      * @return CompletableFuture with database error result
      */
     public static <T> CompletableFuture<DatabaseManager.DbResult<T>> handleDatabaseError(
@@ -46,13 +46,17 @@ public final class VeloAuthErrorHandler {
                 operation, context != null && !context.isEmpty() ? " for " + context : "");
 
         if (marker != null) {
-            logger.error(marker, "{}: {}", errorMessage, throwable.getMessage(), throwable);
+            if (logger.isErrorEnabled()) {
+                logger.error(marker, "{}: {}", errorMessage, throwable.getMessage(), throwable);
+            }
         } else {
-            logger.error("{}: {}", errorMessage, throwable.getMessage(), throwable);
+            if (logger.isErrorEnabled()) {
+                logger.error("{}: {}", errorMessage, throwable.getMessage(), throwable);
+            }
         }
 
         // Create user-friendly error message
-        String userMessage = messages != null 
+        String userMessage = messages != null
                 ? messages.get("database.error.general")
                 : "Database error occurred. Please try again later.";
 
@@ -67,8 +71,8 @@ public final class VeloAuthErrorHandler {
      *
      * @param throwable The exception that occurred
      * @param operation The operation being performed
-     * @param logger The logger to use
-     * @param messages Messages instance for error message generation
+     * @param logger    The logger to use
+     * @param messages  Messages instance for error message generation
      * @return CompletableFuture with database error result
      */
     public static <T> CompletableFuture<DatabaseManager.DbResult<T>> handleDatabaseError(
@@ -85,9 +89,9 @@ public final class VeloAuthErrorHandler {
      *
      * @param throwable The exception that occurred
      * @param operation The operation being performed
-     * @param logger The logger to use
-     * @param messages Messages instance for error message generation
-     * @param context Additional context (username, etc.)
+     * @param logger    The logger to use
+     * @param messages  Messages instance for error message generation
+     * @param context   Additional context (username, etc.)
      * @return CompletableFuture with database error result
      */
     public static <T> CompletableFuture<DatabaseManager.DbResult<T>> handleDatabaseError(
@@ -104,7 +108,7 @@ public final class VeloAuthErrorHandler {
      * Creates a standardized error message for database operations.
      *
      * @param operation The operation that failed
-     * @param context Additional context information
+     * @param context   Additional context information
      * @return Formatted error message
      */
     public static String formatDatabaseError(String operation, String context) {
@@ -128,21 +132,21 @@ public final class VeloAuthErrorHandler {
         // Check for connection-related errors
         if (throwable instanceof SQLException sqlException) {
             String message = sqlException.getMessage().toLowerCase();
-            
+
             return message.contains("connection") ||
-                   message.contains("timeout") ||
-                   message.contains("network") ||
-                   message.contains("communication") ||
-                   isConnectionErrorCode(sqlException.getErrorCode());
+                    message.contains("timeout") ||
+                    message.contains("network") ||
+                    message.contains("communication") ||
+                    isConnectionErrorCode(sqlException.getErrorCode());
         }
 
         // Check for common database connectivity issues
         String message = throwable.getMessage().toLowerCase();
         return message.contains("connection") ||
-               message.contains("timeout") ||
-               message.contains("network") ||
-               message.contains("pool") ||
-               message.contains("datasource");
+                message.contains("timeout") ||
+                message.contains("network") ||
+                message.contains("pool") ||
+                message.contains("datasource");
     }
 
     /**
@@ -154,25 +158,25 @@ public final class VeloAuthErrorHandler {
     private static boolean isConnectionErrorCode(int errorCode) {
         // Common connection error codes for various databases
         return errorCode == 0 || // Connection failure
-               errorCode == 8001 || // Network error
-               errorCode == 8003 || // Cannot connect
-               errorCode == 8006 || // Connection refused
-               errorCode == 8007 || // Connection timeout
-               errorCode == 17002 || // IO Exception: The Network Adapter could not establish the connection
-               errorCode == 17410 || // No more data to read from socket
-               errorCode == 12514 || // TNS:listener does not currently know of service requested
-               errorCode == 12541 || // TNS:no listener
-               errorCode == 12560; // TNS:protocol adapter error
+                errorCode == 8001 || // Network error
+                errorCode == 8003 || // Cannot connect
+                errorCode == 8006 || // Connection refused
+                errorCode == 8007 || // Connection timeout
+                errorCode == 17002 || // IO Exception: The Network Adapter could not establish the connection
+                errorCode == 17410 || // No more data to read from socket
+                errorCode == 12514 || // TNS:listener does not currently know of service requested
+                errorCode == 12541 || // TNS:no listener
+                errorCode == 12560; // TNS:protocol adapter error
     }
 
     /**
      * Logs security-related database errors with appropriate severity.
      *
-     * @param throwable The exception that occurred
-     * @param operation The operation being performed
-     * @param logger The logger to use
+     * @param throwable      The exception that occurred
+     * @param operation      The operation being performed
+     * @param logger         The logger to use
      * @param securityMarker Security marker for categorized logging
-     * @param context Security context (username, IP, etc.)
+     * @param context        Security context (username, IP, etc.)
      */
     public static void handleSecurityDatabaseError(
             Throwable throwable,
