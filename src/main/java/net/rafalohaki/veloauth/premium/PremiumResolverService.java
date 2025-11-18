@@ -33,6 +33,12 @@ public class PremiumResolverService {
         this.resolverSettings = Objects.requireNonNull(settings, "settings").getPremiumResolverSettings();
         this.dao = Objects.requireNonNull(premiumUuidDao, "premiumUuidDao");
 
+        // Debug logging to check actual resolver settings
+        logger.info("[PremiumResolver] Config - Mojang: {}, Ashcon: {}, Wpme: {}", 
+                resolverSettings.isMojangEnabled(), 
+                resolverSettings.isAshconEnabled(), 
+                resolverSettings.isWpmeEnabled());
+
         int timeoutMs = Math.max(100, resolverSettings.getRequestTimeoutMs());
         List<PremiumResolver> resolverList = new ArrayList<>();
         resolverList.add(new ConfigurablePremiumResolver(logger, resolverSettings.isMojangEnabled(), timeoutMs, ResolverConfig.MOJANG));

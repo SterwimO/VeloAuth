@@ -32,6 +32,9 @@ public final class JdbcAuthDao {
     private final String uuidColumn;
     private final String regDateColumn;
     private final String loginDateColumn;
+    private final String premiumUuidColumn;
+    private final String totpTokenColumn;
+    private final String issuedTimeColumn;
 
     private final String selectPlayerSql;
     private final String insertPlayerSql;
@@ -51,6 +54,9 @@ public final class JdbcAuthDao {
         this.uuidColumn = column("UUID");
         this.regDateColumn = column("REGDATE");
         this.loginDateColumn = column("LOGINDATE");
+        this.premiumUuidColumn = column("PREMIUMUUID");
+        this.totpTokenColumn = column("TOTPTOKEN");
+        this.issuedTimeColumn = column("ISSUEDTIME");
 
         this.selectPlayerSql = "SELECT " + joinColumns(
                 nicknameColumn,
@@ -60,7 +66,10 @@ public final class JdbcAuthDao {
                 loginIpColumn,
                 uuidColumn,
                 regDateColumn,
-                loginDateColumn
+                loginDateColumn,
+                premiumUuidColumn,
+                totpTokenColumn,
+                issuedTimeColumn
         ) + " FROM " + authTable + WHERE_CLAUSE + lowercaseNicknameColumn + " = ?";
 
         this.insertPlayerSql = "INSERT INTO " + authTable + " (" + joinColumns(
@@ -71,8 +80,11 @@ public final class JdbcAuthDao {
                 loginIpColumn,
                 uuidColumn,
                 regDateColumn,
-                loginDateColumn
-        ) + ") VALUES (?, ?, ?, ?, ?, ?, ?, ?)";
+                loginDateColumn,
+                premiumUuidColumn,
+                totpTokenColumn,
+                issuedTimeColumn
+        ) + ") VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)";
 
         this.updatePlayerSql = "UPDATE " + authTable + " SET " +
                 nicknameColumn + COMMA_SPACE_EQUALS_QUESTION +
@@ -81,7 +93,10 @@ public final class JdbcAuthDao {
                 loginIpColumn + COMMA_SPACE_EQUALS_QUESTION +
                 uuidColumn + COMMA_SPACE_EQUALS_QUESTION +
                 regDateColumn + COMMA_SPACE_EQUALS_QUESTION +
-                loginDateColumn + " = ?" + WHERE_CLAUSE + lowercaseNicknameColumn + " = ?";
+                loginDateColumn + COMMA_SPACE_EQUALS_QUESTION +
+                premiumUuidColumn + COMMA_SPACE_EQUALS_QUESTION +
+                totpTokenColumn + COMMA_SPACE_EQUALS_QUESTION +
+                issuedTimeColumn + " = ?" + WHERE_CLAUSE + lowercaseNicknameColumn + " = ?";
 
         this.deletePlayerSql = "DELETE FROM " + authTable + WHERE_CLAUSE + lowercaseNicknameColumn + " = ?";
     }
@@ -175,6 +190,9 @@ public final class JdbcAuthDao {
         statement.setString(6, player.getUuid());
         statement.setLong(7, player.getRegDate());
         statement.setLong(8, player.getLoginDate());
+        statement.setString(9, player.getPremiumUuid());
+        statement.setString(10, player.getTotpToken());
+        statement.setLong(11, player.getIssuedTime());
     }
 
     private void bindUpdate(PreparedStatement statement, RegisteredPlayer player) throws SQLException {
@@ -185,7 +203,10 @@ public final class JdbcAuthDao {
         statement.setString(5, player.getUuid());
         statement.setLong(6, player.getRegDate());
         statement.setLong(7, player.getLoginDate());
-        statement.setString(8, player.getLowercaseNickname());
+        statement.setString(8, player.getPremiumUuid());
+        statement.setString(9, player.getTotpToken());
+        statement.setLong(10, player.getIssuedTime());
+        statement.setString(11, player.getLowercaseNickname());
     }
 
     private RegisteredPlayer mapPlayer(ResultSet resultSet) throws SQLException {
@@ -199,12 +220,20 @@ public final class JdbcAuthDao {
             logger.warn("Nieprawidłowy nickname w bazie danych", e);
             throw new SQLException("Invalid nickname stored in database", e);
         }
+        
+        // Hash może być null dla graczy premium (limboauth compatibility)
         player.setHash(resultSet.getString("HASH"));
         player.setIp(resultSet.getString("IP"));
         player.setLoginIp(resultSet.getString("LOGINIP"));
         player.setUuid(resultSet.getString("UUID"));
         player.setRegDate(resultSet.getLong("REGDATE"));
         player.setLoginDate(resultSet.getLong("LOGINDATE"));
+        
+        // Limboauth compatibility columns
+        player.setPremiumUuid(resultSet.getString("PREMIUMUUID"));
+        player.setTotpToken(resultSet.getString("TOTPTOKEN"));
+        player.setIssuedTime(resultSet.getLong("ISSUEDTIME"));
+        
         return player;
     }
 

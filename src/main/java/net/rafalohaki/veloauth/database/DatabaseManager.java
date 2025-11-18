@@ -542,7 +542,7 @@ public class DatabaseManager {
     }
 
     /**
-     * Tworzy tabele jeśli nie istnieją.
+     * Tworzy tabele jeśli nie istnieją i migruje schemat dla kompatybilności z limboauth.
      */
     private void createTablesIfNotExists() throws SQLException {
         logger.info(messages.get("database.manager.creating_tables"));
@@ -553,10 +553,81 @@ public class DatabaseManager {
         // Tworzenie tabeli PREMIUM_UUIDS
         TableUtils.createTableIfNotExists(connectionSource, PremiumUuid.class);
 
+        // Migrowanie schematu dla kompatybilności z limboauth
+        migrateAuthTableForLimboauth();
+
         // Tworzenie indeksów dla wydajności
         createIndexesIfNotExists();
 
         logger.info(messages.get("database.manager.tables_created"));
+    }
+
+    /**
+     * Migruje tabelę AUTH dla kompatybilności z limboauth.
+     * Dodaje brakujące kolumny: PREMIUMUUID, TOTPTOKEN, ISSUEDTIME.
+     */
+    private void migrateAuthTableForLimboauth() throws SQLException {
+        try {
+            // Pobierz świeże połączenie bezpośrednio z ConnectionSource
+            java.sql.Connection connection = connectionSource.getReadWriteConnection(null).getUnderlyingConnection();
+            try {
+                // Sprawdź które kolumny limboauth już istnieją
+                boolean hasPremiumUuid = columnExists(connection, "AUTH", "PREMIUMUUID");
+                boolean hasTotpToken = columnExists(connection, "AUTH", "TOTPTOKEN");
+                boolean hasIssuedTime = columnExists(connection, "AUTH", "ISSUEDTIME");
+
+                DatabaseType dbType = DatabaseType.fromName(config.getStorageType());
+                String quote = dbType == DatabaseType.POSTGRESQL ? "\"" : "`";
+
+                // Dodaj brakujące kolumny
+                if (!hasPremiumUuid) {
+                    String sql = String.format("ALTER TABLE %sAUTH%s ADD COLUMN %sPREMIUMUUID%s VARCHAR(36)", 
+                            quote, quote, quote, quote);
+                    try (java.sql.Statement stmt = connection.createStatement()) {
+                        stmt.execute(sql);
+                    }
+                    logger.info(DB_MARKER, "Dodano kolumnę PREMIUMUUID do tabeli AUTH");
+                }
+
+                if (!hasTotpToken) {
+                    String sql = String.format("ALTER TABLE %sAUTH%s ADD COLUMN %sTOTPTOKEN%s VARCHAR(32)", 
+                            quote, quote, quote, quote);
+                    try (java.sql.Statement stmt = connection.createStatement()) {
+                        stmt.execute(sql);
+                    }
+                    logger.info(DB_MARKER, "Dodano kolumnę TOTPTOKEN do tabeli AUTH");
+                }
+
+                if (!hasIssuedTime) {
+                    String sql = String.format("ALTER TABLE %sAUTH%s ADD COLUMN %sISSUEDTIME%s BIGINT DEFAULT 0", 
+                            quote, quote, quote, quote);
+                    try (java.sql.Statement stmt = connection.createStatement()) {
+                        stmt.execute(sql);
+                    }
+                    logger.info(DB_MARKER, "Dodano kolumnę ISSUEDTIME do tabeli AUTH");
+                }
+
+                if (!hasPremiumUuid || !hasTotpToken || !hasIssuedTime) {
+                    logger.info(DB_MARKER, "Migracja schematu AUTH dla limboauth zakończona");
+                }
+
+            } finally {
+                // Nie zamykaj połączenia - jest zarządzane przez ConnectionSource
+            }
+        } catch (SQLException e) {
+            logger.error(DB_MARKER, "Błąd podczas migracji tabeli AUTH dla limboauth", e);
+            throw e;
+        }
+    }
+
+    /**
+     * Sprawdza czy kolumna istnieje w tabeli używając DatabaseMetaData.
+     */
+    private boolean columnExists(java.sql.Connection connection, String tableName, String columnName) throws SQLException {
+        java.sql.DatabaseMetaData metaData = connection.getMetaData();
+        try (java.sql.ResultSet columns = metaData.getColumns(null, null, tableName, columnName)) {
+            return columns.next();
+        }
     }
 
     /**

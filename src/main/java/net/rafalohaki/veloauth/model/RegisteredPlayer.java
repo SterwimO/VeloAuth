@@ -29,8 +29,9 @@ public class RegisteredPlayer {
 
     /**
      * BCrypt hash hasła użytkownika (nigdy nie przechowuj plaintext!).
+     * Może być null dla graczy premium (limboauth compatibility).
      */
-    @DatabaseField(columnName = "HASH", canBeNull = false)
+    @DatabaseField(columnName = "HASH")
     private String hash;
 
     /**
@@ -65,6 +66,25 @@ public class RegisteredPlayer {
     private long loginDate;
 
     /**
+     * Premium UUID gracza (limboauth compatibility).
+     * Różni się od UUID - używane do weryfikacji statusu premium.
+     */
+    @DatabaseField(columnName = "PREMIUMUUID")
+    private String premiumUuid;
+
+    /**
+     * TOTP token dla dwuetapowej autoryzacji (limboauth compatibility).
+     */
+    @DatabaseField(columnName = "TOTPTOKEN")
+    private String totpToken;
+
+    /**
+     * Timestamp wydania tokenu/premium statusu (limboauth compatibility).
+     */
+    @DatabaseField(columnName = "ISSUEDTIME")
+    private long issuedTime;
+
+    /**
      * Konstruktor bezparametrowy wymagany przez ORMLite.
      */
     public RegisteredPlayer() {
@@ -75,7 +95,7 @@ public class RegisteredPlayer {
      * Tworzy nowego zarejestrowanego gracza.
      *
      * @param nickname Oryginalny nickname gracza
-     * @param hash     BCrypt hash hasła
+     * @param hash     BCrypt hash hasła (null dla graczy premium)
      * @param ip       IP adres rejestracji
      * @param uuid     UUID gracza Minecraft
      */
@@ -83,9 +103,7 @@ public class RegisteredPlayer {
         if (nickname == null || nickname.isEmpty()) {
             throw new IllegalArgumentException("Nickname nie może być pusty");
         }
-        if (hash == null || hash.isEmpty()) {
-            throw new IllegalArgumentException("Hash nie może być pusty");
-        }
+        // Hash może być null dla graczy premium (limboauth compatibility)
 
         this.nickname = nickname;
         this.lowercaseNickname = nickname.toLowerCase();
@@ -144,12 +162,10 @@ public class RegisteredPlayer {
     /**
      * Ustawia nowy hash hasła.
      *
-     * @param hash Nowy BCrypt hash
+     * @param hash Nowy BCrypt hash (null dla graczy premium)
      */
     public void setHash(String hash) {
-        if (hash == null || hash.isEmpty()) {
-            throw new IllegalArgumentException("Hash nie może być pusty");
-        }
+        // Hash może być null dla graczy premium (limboauth compatibility)
         this.hash = hash;
     }
 
@@ -242,6 +258,60 @@ public class RegisteredPlayer {
      */
     public void setLoginDate(long loginDate) {
         this.loginDate = loginDate;
+    }
+
+    /**
+     * Zwraca premium UUID gracza.
+     *
+     * @return Premium UUID gracza
+     */
+    public String getPremiumUuid() {
+        return premiumUuid;
+    }
+
+    /**
+     * Ustawia premium UUID gracza.
+     *
+     * @param premiumUuid Premium UUID gracza
+     */
+    public void setPremiumUuid(String premiumUuid) {
+        this.premiumUuid = premiumUuid;
+    }
+
+    /**
+     * Zwraca TOTP token gracza.
+     *
+     * @return TOTP token
+     */
+    public String getTotpToken() {
+        return totpToken;
+    }
+
+    /**
+     * Ustawia TOTP token gracza.
+     *
+     * @param totpToken TOTP token
+     */
+    public void setTotpToken(String totpToken) {
+        this.totpToken = totpToken;
+    }
+
+    /**
+     * Zwraca timestamp wydania tokenu/premium statusu.
+     *
+     * @return Timestamp wydania w milisekundach
+     */
+    public long getIssuedTime() {
+        return issuedTime;
+    }
+
+    /**
+     * Ustawia timestamp wydania tokenu/premium statusu.
+     *
+     * @param issuedTime Timestamp wydania w milisekundach
+     */
+    public void setIssuedTime(long issuedTime) {
+        this.issuedTime = issuedTime;
     }
 
     /**
