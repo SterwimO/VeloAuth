@@ -162,14 +162,14 @@ public final class DatabaseHelper {
                                 logger,
                                 marker,
                                 messages,
-                                "player: " + player.getNickname()
+                                String.format("player: %s", player.getNickname())
                         );
                         return false;
                     }
                     return dbResult.getValue();
                 })
                 .exceptionally(throwable -> {
-                    logger.error(marker, "{}{}", messages.get("database.error.saving"), player.getNickname(), throwable);
+                    logger.error(marker, "{} {}", messages.get("database.error.saving"), player.getNickname(), throwable);
                     return false;
                 });
     }

@@ -130,7 +130,7 @@ public final class VeloAuthValidator {
 
         String username = player.getUsername();
         if (!isValidUsername(username)) {
-            return ValidationResult.invalid("Invalid player username: " + username);
+            return ValidationResult.invalid(String.format("Invalid player username: %s", username));
         }
 
         if (player.getUniqueId() == null) {
@@ -170,7 +170,7 @@ public final class VeloAuthValidator {
                 break;
         }
         
-        return Component.text("Błąd walidacji: " + message, NamedTextColor.RED);
+        return Component.text(String.format("Błąd walidacji: %s", message), NamedTextColor.RED);
     }
 
     /**
