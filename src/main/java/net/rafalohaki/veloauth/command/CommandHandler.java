@@ -114,6 +114,25 @@ public class CommandHandler {
     }
 
     /**
+     * Handles database errors consistently across all commands.
+     * Centralized utility to eliminate code duplication.
+     *
+     * @param result Database result to check
+     * @param player Player to send error message to
+     * @param operation Description of the operation being performed
+     * @return true if there was a database error (handled), false if operation can continue
+     */
+    private boolean handleDatabaseError(DatabaseManager.DbResult<?> result, Player player, String operation) {
+        if (result.isDatabaseError()) {
+            logger.error(SECURITY_MARKER, "[DATABASE ERROR] {} failed for {}: {}", 
+                    operation, player.getUsername(), result.getErrorMessage());
+            player.sendMessage(ValidationUtils.createErrorComponent(messages.get(StringConstants.ERROR_DATABASE_QUERY)));
+            return true;
+        }
+        return false;
+    }
+
+    /**
      * Komenda /login <hasło>
      */
     private class LoginCommand implements SimpleCommand {
@@ -180,10 +199,7 @@ public class CommandHandler {
                 var dbResult = databaseManager.findPlayerByNickname(lowercaseNick).join();
                 
                 // CRITICAL: Fail-secure on database errors
-                if (dbResult.isDatabaseError()) {
-                    logger.error(SECURITY_MARKER, "[DATABASE ERROR] Login failed for {}: {}", 
-                            player.getUsername(), dbResult.getErrorMessage());
-                    player.sendMessage(ValidationUtils.createErrorComponent(messages.get(StringConstants.ERROR_DATABASE_QUERY)));
+                if (handleDatabaseError(dbResult, player, "Login")) {
                     return;
                 }
 
@@ -217,14 +233,12 @@ public class CommandHandler {
                 var saveResult = databaseManager.savePlayer(registeredPlayer).join();
                 
                 // CRITICAL: Fail-secure on database errors
-                if (saveResult.isDatabaseError()) {
-                    logger.error(SECURITY_MARKER, "[DATABASE ERROR] Failed to save login data for {}: {}", 
-                            player.getUsername(), saveResult.getErrorMessage());
-                    player.sendMessage(ValidationUtils.createErrorComponent(messages.get(StringConstants.ERROR_DATABASE_QUERY)));
+                if (handleDatabaseError(saveResult, player, "Failed to save login data for")) {
                     return;
                 }
                 
-                if (!saveResult.getValue()) {
+                boolean saved = saveResult.getValue();
+                if (!saved) {
                     logger.error(DB_MARKER, "Nie udało się zapisać danych logowania dla gracza: {}", player.getUsername());
                     player.sendMessage(ValidationUtils.createErrorComponent(messages.get(StringConstants.ERROR_DATABASE_QUERY)));
                     return;
@@ -234,10 +248,7 @@ public class CommandHandler {
                 var premiumResult = databaseManager.isPremium(player.getUsername()).join();
                 
                 // CRITICAL: Fail-secure on database errors
-                if (premiumResult.isDatabaseError()) {
-                    logger.error(SECURITY_MARKER, "[DATABASE ERROR] Failed to check premium status for {}: {}", 
-                            player.getUsername(), premiumResult.getErrorMessage());
-                    player.sendMessage(ValidationUtils.createErrorComponent(messages.get(StringConstants.ERROR_DATABASE_QUERY)));
+                if (handleDatabaseError(premiumResult, player, "Failed to check premium status for")) {
                     return;
                 }
                 
@@ -387,10 +398,7 @@ public class CommandHandler {
                 var existingResult = databaseManager.findPlayerByNickname(lowercaseNick).join();
                 
                 // CRITICAL: Fail-secure on database errors
-                if (existingResult.isDatabaseError()) {
-                    logger.error(SECURITY_MARKER, "[DATABASE ERROR] Registration check failed for {}: {}", 
-                            player.getUsername(), existingResult.getErrorMessage());
-                    player.sendMessage(ValidationUtils.createErrorComponent(messages.get(StringConstants.ERROR_DATABASE_QUERY)));
+                if (handleDatabaseError(existingResult, player, "Registration check failed for")) {
                     return false;
                 }
 
@@ -415,14 +423,12 @@ public class CommandHandler {
                 var saveResult = databaseManager.savePlayer(newPlayer).join();
                 
                 // CRITICAL: Fail-secure on database errors
-                if (saveResult.isDatabaseError()) {
-                    logger.error(SECURITY_MARKER, "[DATABASE ERROR] Failed to save new player {}: {}", 
-                            player.getUsername(), saveResult.getErrorMessage());
-                    player.sendMessage(ValidationUtils.createErrorComponent(messages.get(StringConstants.ERROR_DATABASE_QUERY)));
+                if (handleDatabaseError(saveResult, player, "Failed to save new player")) {
                     return false;
                 }
                 
-                if (!saveResult.getValue()) {
+                boolean saved = saveResult.getValue();
+                if (!saved) {
                     player.sendMessage(ValidationUtils.createErrorComponent(messages.get(StringConstants.ERROR_DATABASE_QUERY)));
                     logger.error(DB_MARKER, "Nie udało się zapisać nowego gracza: {}", lowercaseNick);
                     return false;
@@ -442,10 +448,7 @@ public class CommandHandler {
                 var premiumResult = databaseManager.isPremium(player.getUsername()).join();
                 
                 // CRITICAL: Fail-secure on database errors
-                if (premiumResult.isDatabaseError()) {
-                    logger.error(SECURITY_MARKER, "[DATABASE ERROR] Failed to check premium status for {}: {}", 
-                            player.getUsername(), premiumResult.getErrorMessage());
-                    player.sendMessage(ValidationUtils.createErrorComponent(messages.get(StringConstants.ERROR_DATABASE_QUERY)));
+                if (handleDatabaseError(premiumResult, player, "Failed to check premium status for")) {
                     return false;
                 }
                 
@@ -529,10 +532,7 @@ public class CommandHandler {
                 var dbResult = databaseManager.findPlayerByNickname(lowercaseNick).join();
                 
                 // CRITICAL: Fail-secure on database errors
-                if (dbResult.isDatabaseError()) {
-                    logger.error(SECURITY_MARKER, "[DATABASE ERROR] Password change failed for {}: {}", 
-                            player.getUsername(), dbResult.getErrorMessage());
-                    player.sendMessage(ValidationUtils.createErrorComponent(messages.get(StringConstants.ERROR_DATABASE_QUERY)));
+                if (handleDatabaseError(dbResult, player, "Password change failed for")) {
                     return;
                 }
                 
@@ -562,10 +562,7 @@ public class CommandHandler {
                 var saveResult = databaseManager.savePlayer(registeredPlayer).join();
                 
                 // CRITICAL: Fail-secure on database errors
-                if (saveResult.isDatabaseError()) {
-                    logger.error(SECURITY_MARKER, "[DATABASE ERROR] Password change save failed for {}: {}", 
-                            player.getUsername(), saveResult.getErrorMessage());
-                    player.sendMessage(ValidationUtils.createErrorComponent(messages.get(StringConstants.ERROR_DATABASE_QUERY)));
+                if (handleDatabaseError(saveResult, player, "Password change save failed for")) {
                     return;
                 }
                 
@@ -582,13 +579,14 @@ public class CommandHandler {
                     var premiumCheckResult = databaseManager.isPremium(player.getUsername()).join();
                     
                     // CRITICAL: Fail-secure on database errors
-                    if (premiumCheckResult.isDatabaseError()) {
-                        logger.error(SECURITY_MARKER, "[DATABASE ERROR] Premium check failed during password change for {}: {}", 
-                                player.getUsername(), premiumCheckResult.getErrorMessage());
+                    if (handleDatabaseError(premiumCheckResult, player, "Premium check failed during password change for")) {
                         // Continue with password change even if premium check fails
-                    } else if (premiumCheckResult.getValue()) {
-                        authCache.removePremiumPlayer(player.getUsername());
-                        logger.debug("Usunięto premium status cache dla: {}", player.getUsername());
+                    } else {
+                        boolean isPremium = premiumCheckResult.getValue();
+                        if (isPremium) {
+                            authCache.removePremiumPlayer(player.getUsername());
+                            logger.debug("Usunięto premium status cache dla: {}", player.getUsername());
+                        }
                     }
 
                     // Rozłącz wszystkie duplikaty tego gracza
@@ -721,6 +719,24 @@ public class CommandHandler {
                 source.sendMessage(ValidationUtils.createErrorComponent(messages.get(StringConstants.ERROR_DATABASE_QUERY)));
             }
         }
+
+        /**
+         * Parses player UUID from RegisteredPlayer with error handling.
+         *
+         * @param registeredPlayer The registered player containing UUID string
+         * @param nickname Player nickname for error reporting
+         * @param source Command source for error messages
+         * @return UUID if valid, null if invalid (error already reported)
+         */
+        private UUID parsePlayerUuid(RegisteredPlayer registeredPlayer, String nickname, CommandSource source) {
+            try {
+                return UUID.fromString(registeredPlayer.getUuid());
+            } catch (IllegalArgumentException e) {
+                logger.warn("Nieprawidłowy UUID dla gracza {}: {}", nickname, registeredPlayer.getUuid());
+                source.sendMessage(ValidationUtils.createErrorComponent("Błąd: nieprawidłowy UUID gracza!"));
+                return null;
+            }
+        }
     }
 
     /**
@@ -802,24 +818,8 @@ public class CommandHandler {
 
             return List.of();
         }
-    }
 
-    /**
-     * Parses player UUID from RegisteredPlayer with error handling.
-     *
-     * @param registeredPlayer The registered player containing UUID string
-     * @param nickname Player nickname for error reporting
-     * @param source Command source for error messages
-     * @return UUID if valid, null if invalid (error already reported)
-     */
-    private UUID parsePlayerUuid(RegisteredPlayer registeredPlayer, String nickname, CommandSource source) {
-        try {
-            return UUID.fromString(registeredPlayer.getUuid());
-        } catch (IllegalArgumentException e) {
-            logger.warn("Nieprawidłowy UUID dla gracza {}: {}", nickname, registeredPlayer.getUuid());
-            source.sendMessage(ValidationUtils.createErrorComponent("Błąd: nieprawidłowy UUID gracza!"));
-            return null;
-        }
+        
     }
 
 }

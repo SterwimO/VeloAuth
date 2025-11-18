@@ -22,12 +22,10 @@ wget https://github.com/rafalohaki/VeloAuth/releases/download/{{VERSION}}/veloau
 - 📝 Comprehensive logging and security events
 - 🌍 Complete internationalization (i18n) support
 - 🇺🇸🇵🇱 English and Polish language support
-- 🔧 Fixed emoji encoding issues in logs
-- 🛠️ Refactored StringConstants for proper localization
 
 ## Recent Changes
 {{CHANGELOG}}
 
 ## Support
 - Issues: https://github.com/rafalohaki/VeloAuth/issues
-- Documentation: Check the in-plugin commands `/vauth help`
+- Admin commands help `/vauth help`
