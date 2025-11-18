@@ -57,7 +57,7 @@ class VeloAuthIntegrationTest {
     private UUID playerUuid;
 
     @BeforeEach
-    void setUp() throws Exception {
+    void setUp() {
         playerUuid = UUID.randomUUID();
 
         // Use real plugin instance to avoid Mockito inline mocking of plugin class

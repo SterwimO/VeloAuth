@@ -254,6 +254,7 @@ public final class JdbcAuthDao {
      * 
      * @return List of players with CONFLICT_MODE = true, or empty list if columns don't exist
      */
+    @SuppressWarnings("java:S2077") // Safe: table() and column() only use hardcoded constants, not user input
     public List<RegisteredPlayer> findAllPlayersInConflictMode() throws SQLException {
         String conflictQuery = "SELECT NICKNAME, HASH, IP, LOGINIP, UUID, REGDATE, LOGINDATE, " +
                               "PREMIUMUUID, TOTPTOKEN, ISSUEDTIME, LOWERCASENICKNAME, " +
