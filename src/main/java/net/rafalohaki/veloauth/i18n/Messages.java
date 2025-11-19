@@ -3,26 +3,69 @@ package net.rafalohaki.veloauth.i18n;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.io.IOException;
 import java.io.InputStream;
+import java.nio.file.Path;
 import java.text.MessageFormat;
 import java.util.Locale;
 import java.util.Map;
+import java.util.MissingResourceException;
 import java.util.Properties;
+import java.util.ResourceBundle;
 import java.util.concurrent.ConcurrentHashMap;
 
 /**
  * Internationalization manager for VeloAuth messages.
- * Thread-safe message loading and formatting with caching.
+ * Thread-safe message loading and formatting with support for external language files.
  */
 public class Messages {
 
     private static final Logger logger = LoggerFactory.getLogger(Messages.class);
 
-    // Cache for loaded message files
+    // Cache for loaded message files (legacy support)
     private static final Map<String, Properties> messageCache = new ConcurrentHashMap<>();
 
     // Current language
     private String currentLanguage = "en";
+    
+    // Language file manager for external files
+    private final LanguageFileManager languageFileManager;
+    
+    // Current resource bundle
+    private ResourceBundle bundle;
+    
+    // Flag to indicate if using external files
+    private final boolean useExternalFiles;
+
+    /**
+     * Creates a Messages instance with external language file support.
+     *
+     * @param dataDirectory The plugin's data directory
+     * @param language The language code (e.g., "en", "pl")
+     */
+    public Messages(Path dataDirectory, String language) {
+        this.languageFileManager = new LanguageFileManager(dataDirectory);
+        this.currentLanguage = language != null ? language.toLowerCase(Locale.ROOT) : "en";
+        this.useExternalFiles = true;
+        
+        try {
+            languageFileManager.initializeLanguageFiles();
+            reload();
+        } catch (IOException e) {
+            logger.error("Failed to initialize language files", e);
+            throw new RuntimeException("Language initialization failed", e);
+        }
+    }
+    
+    /**
+     * Creates a Messages instance using JAR-embedded language files (legacy mode).
+     * Used for testing and backward compatibility.
+     */
+    public Messages() {
+        this.languageFileManager = null;
+        this.useExternalFiles = false;
+        this.currentLanguage = "en";
+    }
 
     /**
      * Sets the current language for messages.
@@ -46,8 +89,33 @@ public class Messages {
         this.currentLanguage = language.toLowerCase(Locale.ROOT);
         logger.info("Language set to: {}", this.currentLanguage);
 
-        // Pre-load messages for the new language
-        loadMessages(this.currentLanguage);
+        // Reload messages for the new language
+        if (useExternalFiles) {
+            try {
+                reload();
+            } catch (IOException e) {
+                logger.error("Failed to reload language files", e);
+            }
+        } else {
+            // Pre-load messages for the new language (legacy mode)
+            loadMessages(this.currentLanguage);
+        }
+    }
+    
+    /**
+     * Reloads language files from disk.
+     * Only works when using external files.
+     *
+     * @throws IOException if language file loading fails
+     */
+    public void reload() throws IOException {
+        if (!useExternalFiles) {
+            logger.warn("Cannot reload - not using external files");
+            return;
+        }
+        
+        this.bundle = languageFileManager.loadLanguageBundle(currentLanguage);
+        logger.info("Loaded language: {}", currentLanguage);
     }
 
     /**
@@ -67,7 +135,11 @@ public class Messages {
      * @return Formatted message or the key if not found
      */
     public String get(String key, Object... args) {
-        return get(currentLanguage, key, args);
+        if (useExternalFiles) {
+            return getFromBundle(key, args);
+        } else {
+            return get(currentLanguage, key, args);
+        }
     }
 
     /**
@@ -110,6 +182,35 @@ public class Messages {
         }
 
         return message;
+    }
+    
+    /**
+     * Gets a message from the external ResourceBundle.
+     * Handles missing keys gracefully by returning a fallback.
+     *
+     * @param key  Message key
+     * @param args Arguments for message formatting
+     * @return Formatted message or fallback if not found
+     */
+    private String getFromBundle(String key, Object... args) {
+        try {
+            String message = bundle.getString(key);
+            
+            // Format message with arguments if provided
+            if (args.length > 0) {
+                try {
+                    return MessageFormat.format(message, args);
+                } catch (IllegalArgumentException e) {
+                    logger.warn("Failed to format message '{}': {}", key, e.getMessage());
+                    return message;
+                }
+            }
+            
+            return message;
+        } catch (MissingResourceException e) {
+            logger.warn("Missing translation key: {}", key);
+            return "Missing: " + key;
+        }
     }
 
     /**

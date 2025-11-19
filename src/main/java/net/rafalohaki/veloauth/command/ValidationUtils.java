@@ -1,13 +1,8 @@
 package net.rafalohaki.veloauth.command;
 
-import com.velocitypowered.api.proxy.Player;
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.format.NamedTextColor;
 import net.rafalohaki.veloauth.config.Settings;
-import net.rafalohaki.veloauth.util.StringConstants;
-
-import java.net.InetAddress;
-import java.net.InetSocketAddress;
 
 /**
  * Utility class for common validation operations across commands.
@@ -64,47 +59,6 @@ public final class ValidationUtils {
     public static ValidationResult validatePasswordMatch(String password, String confirmPassword) {
         if (!password.equals(confirmPassword)) {
             return ValidationResult.error("Hasła nie są identyczne!");
-        }
-        return ValidationResult.success();
-    }
-
-    /**
-     * Extracts IP address from player as string.
-     *
-     * @param player Player to extract IP from
-     * @return IP address string or "unknown" if unavailable
-     */
-    public static String getPlayerIp(Player player) {
-        var address = player.getRemoteAddress();
-        if (address instanceof InetSocketAddress inetAddress) {
-            return inetAddress.getAddress().getHostAddress();
-        }
-        return StringConstants.UNKNOWN;
-    }
-
-    /**
-     * Extracts InetAddress from player.
-     *
-     * @param player Player to extract InetAddress from
-     * @return InetAddress or null if unavailable
-     */
-    public static InetAddress getPlayerAddress(Player player) {
-        var address = player.getRemoteAddress();
-        if (address instanceof InetSocketAddress inetAddress) {
-            return inetAddress.getAddress();
-        }
-        return null;
-    }
-
-    /**
-     * Validates command source is a player.
-     *
-     * @param source Command source to validate
-     * @return ValidationResult with validation status and message
-     */
-    public static ValidationResult validatePlayerSource(com.velocitypowered.api.command.CommandSource source) {
-        if (!(source instanceof Player)) {
-            return ValidationResult.error("Ta komenda jest tylko dla graczy!");
         }
         return ValidationResult.success();
     }

@@ -11,6 +11,37 @@ import java.util.Objects;
 /**
  * Immutable konfiguracja bazy danych.
  * Thread-safe object dla bezpiecznego dostępu wielowątkowego.
+ * 
+ * <p><b>Builder Pattern (v2.0.0):</b>
+ * The deprecated 11-parameter constructor has been removed in v2.0.0. All callers
+ * must now use the {@link HikariConfigParams} builder pattern for remote databases:
+ * 
+ * <pre>{@code
+ * DatabaseConfig config = DatabaseConfig.forRemoteWithHikari(
+ *     HikariConfigParams.builder()
+ *         .storageType("MYSQL")
+ *         .hostname("localhost")
+ *         .port(3306)
+ *         .database("veloauth")
+ *         .user("root")
+ *         .password("password")
+ *         .connectionPoolSize(20)
+ *         .maxLifetime(1800000)
+ *         .build()
+ * );
+ * }</pre>
+ * 
+ * <p><b>Supported Databases:</b>
+ * <ul>
+ *   <li><b>MySQL</b> - Remote with HikariCP connection pooling</li>
+ *   <li><b>PostgreSQL</b> - Remote with HikariCP and SSL support</li>
+ *   <li><b>H2</b> - Local embedded database</li>
+ *   <li><b>SQLite</b> - Local file-based database</li>
+ * </ul>
+ * 
+ * @since 1.0.0
+ * @see HikariConfigParams
+ * @see DatabaseType
  */
 public final class DatabaseConfig {
 
@@ -166,50 +197,44 @@ public final class DatabaseConfig {
     }
 
     /**
-     * Tworzy konfigurację dla zdalnych baz danych z HikariCP.
+     * Tworzy konfigurację dla zdalnej bazy danych z HikariCP.
+     * HikariCP to szybki connection pool z lepszą wydajnością niż JDBC c3p0.
+     * 
+     * <p><b>Recommended Method (v2.0.0):</b>
+     * This is the preferred method for creating remote database configurations.
+     * The deprecated 11-parameter constructor has been removed.
      *
-     * @param storageType          Typ bazy danych (MYSQL lub POSTGRESQL)
-     * @param hostname             Hostname serwera
-     * @param port                 Port serwera
-     * @param database             Nazwa bazy danych
-     * @param user                 Użytkownik
-     * @param password             Hasło
-     * @param connectionPoolSize   Rozmiar connection pool
-     * @param maxLifetime          Maksymalny czas życia połączenia (ms)
-     * @param connectionParameters Dodatkowe parametry połączenia
-     * @param postgreSQLSettings   Ustawienia PostgreSQL (może być null)
+     * @param params Configuration parameters for HikariCP built using {@link HikariConfigParams.Builder}
      * @return DatabaseConfig z HikariCP
+     * @throws IllegalArgumentException if storageType is not supported or driver class not found
+     * @since 1.0.0
+     * @see HikariConfigParams
      */
-    @SuppressWarnings({"java:S107", "java:S2139"})
-    // S107: All 11 parameters required for complete HikariCP configuration
+    @SuppressWarnings("java:S2139")
     // S2139: Class.forName loads JDBC drivers from trusted DatabaseType enum only, not user input
-    public static DatabaseConfig forRemoteWithHikari(String storageType, String hostname,
-                                                     int port, String database,
-                                                     String user, String password,
-                                                     int connectionPoolSize, int maxLifetime,
-                                                     String connectionParameters,
-                                                     net.rafalohaki.veloauth.config.Settings.PostgreSQLSettings postgreSQLSettings,
-                                                     boolean debugEnabled) {
-
-        DatabaseType dbType = DatabaseType.fromName(storageType);
+    public static DatabaseConfig forRemoteWithHikari(HikariConfigParams params) {
+        DatabaseType dbType = DatabaseType.fromName(params.getStorageType());
         if (dbType == null) {
-            throw new IllegalArgumentException("Nieobsługiwany typ bazy danych: " + storageType);
+            throw new IllegalArgumentException("Nieobsługiwany typ bazy danych: " + params.getStorageType());
         }
 
-        String jdbcUrl = buildJdbcUrl(dbType, hostname, port, database, connectionParameters, postgreSQLSettings);
+        String jdbcUrl = buildJdbcUrl(dbType, params.getHostname(), params.getPort(), 
+                                      params.getDatabase(), params.getConnectionParameters(), 
+                                      params.getPostgreSQLSettings());
         String driverClass = resolveDriverClass(dbType);
 
         // Debug logging for connection URL (only if debug enabled)
-        if (debugEnabled) {
+        if (params.isDebugEnabled()) {
             logger.debug("[VeloAuth DEBUG] JDBC URL: {}", jdbcUrl);
             logger.debug("[VeloAuth DEBUG] Database Type: {}", dbType);
-            logger.debug("[VeloAuth DEBUG] Hostname: {}:{}", hostname, port);
-            logger.debug("[VeloAuth DEBUG] SSL Settings: {}", (postgreSQLSettings != null ? "enabled" : "using defaults"));
+            logger.debug("[VeloAuth DEBUG] Hostname: {}:{}", params.getHostname(), params.getPort());
+            logger.debug("[VeloAuth DEBUG] SSL Settings: {}", (params.getPostgreSQLSettings() != null ? "enabled" : "using defaults"));
         }
 
         HikariConfig hikariConfig = new HikariConfig();
-        configureBasicHikariSettings(hikariConfig, jdbcUrl, user, password, connectionPoolSize, maxLifetime);
-        configureDatabaseOptimizations(hikariConfig, dbType, postgreSQLSettings);
+        configureBasicHikariSettings(hikariConfig, jdbcUrl, params.getUser(), params.getPassword(), 
+                                     params.getConnectionPoolSize(), params.getMaxLifetime());
+        configureDatabaseOptimizations(hikariConfig, dbType, params.getPostgreSQLSettings());
 
         hikariConfig.setDriverClassName(driverClass);
         try {
@@ -222,8 +247,10 @@ public final class DatabaseConfig {
 
         HikariDataSource dataSource = new HikariDataSource(hikariConfig);
 
-        return new DatabaseConfig(storageType, dataSource, connectionPoolSize, jdbcUrl);
+        return new DatabaseConfig(params.getStorageType(), dataSource, params.getConnectionPoolSize(), jdbcUrl);
     }
+
+
 
     private static void configureBasicHikariSettings(HikariConfig hikariConfig, String jdbcUrl,
                                                      String user, String password,

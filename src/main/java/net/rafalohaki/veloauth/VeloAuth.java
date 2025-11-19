@@ -14,10 +14,13 @@ import net.rafalohaki.veloauth.connection.ConnectionManager;
 import net.rafalohaki.veloauth.database.DatabaseConfig;
 import net.rafalohaki.veloauth.database.DatabaseManager;
 import net.rafalohaki.veloauth.database.DatabaseType;
+import net.rafalohaki.veloauth.database.HikariConfigParams;
 import net.rafalohaki.veloauth.exception.VeloAuthException;
 import net.rafalohaki.veloauth.i18n.Messages;
 import net.rafalohaki.veloauth.listener.AuthListener;
 import net.rafalohaki.veloauth.listener.EarlyLoginBlocker;
+import net.rafalohaki.veloauth.listener.PreLoginHandler;
+import net.rafalohaki.veloauth.listener.PostLoginHandler;
 import net.rafalohaki.veloauth.premium.PremiumResolverService;
 import net.rafalohaki.veloauth.util.VirtualThreadExecutorProvider;
 import org.slf4j.Logger;
@@ -66,6 +69,11 @@ public class VeloAuth {
     private PremiumResolverService premiumResolverService;
 
     // Status pluginu
+    // CRITICAL: This flag protects against early connections during initialization
+    // - Starts as FALSE to block connections
+    // - Set to TRUE only after ALL components successfully initialize
+    // - Remains FALSE if initialization fails (prevents connections to broken plugin)
+    // - Set to FALSE during shutdown to reject new operations
     private volatile boolean initialized = false;
 
     /**
@@ -85,6 +93,17 @@ public class VeloAuth {
             logger.debug("VeloAuth konstruktor - Java {}, Velocity API {}",
                     System.getProperty("java.version"),
                     server.getVersion().getVersion());
+        }
+    }
+
+    private boolean reloadLanguageFiles() {
+        try {
+            messages.reload();
+            logger.info("Language files reloaded successfully");
+            return true;
+        } catch (Exception e) {
+            logger.error("Failed to reload language files", e);
+            return false;
         }
     }
 
@@ -116,10 +135,18 @@ public class VeloAuth {
 
         // Inicjalizacja asynchroniczna z Virtual Threads
         // skipcq: JAVA-W1087 - Future is properly handled with whenComplete
+        long initializationStartTime = System.currentTimeMillis();
+        logger.info("🚀 Starting VeloAuth initialization at {} (initialized flag: {})", 
+                new java.util.Date(initializationStartTime), initialized);
+        
         CompletableFuture.runAsync(this::initializePlugin, VirtualThreadExecutorProvider.getVirtualExecutor())
                 .whenComplete((result, throwable) -> {
+                    long initializationDuration = System.currentTimeMillis() - initializationStartTime;
+                    
                     if (throwable != null) {
-                        logger.error("Error during VeloAuth initialization", throwable);
+                        logger.error("❌ VeloAuth initialization FAILED after {} ms", initializationDuration, throwable);
+                        // CRITICAL: Keep initialized flag as FALSE to prevent connections to broken plugin
+                        logger.warn("⚠️ Initialization flag remains FALSE - all player connections will be blocked");
                         shutdown();
                     } else {
                         // Clear any stale cache entries from previous server runs
@@ -132,7 +159,10 @@ public class VeloAuth {
                             logger.info("Cleared stale authentication cache entries");
                         }
 
+                        // CRITICAL: Set initialized flag to TRUE only after ALL components are ready
                         initialized = true;
+                        logger.info("✅ VeloAuth initialization completed successfully in {} ms", initializationDuration);
+                        logger.info("🟢 Initialization flag set to TRUE - player connections now allowed");
                         logger.info(messages.get("plugin.initialization.ready"));
                         logStartupInfo();
                     }
@@ -197,33 +227,40 @@ public class VeloAuth {
     }
 
     private void initializeConfiguration() {
-        if (logger.isInfoEnabled()) {
-            logger.info("Loading configuration...");
-        }
+        logger.info("📋 [1/8] Loading configuration...");
+        long startTime = System.currentTimeMillis();
+        
         settings = new Settings(dataDirectory);
         if (!settings.load()) {
             throw VeloAuthException.configuration("settings loading", null);
         }
+        
+        logger.info("✅ Configuration loaded in {} ms", System.currentTimeMillis() - startTime);
     }
 
     private void initializeMessages() {
-        if (logger.isInfoEnabled()) {
-            logger.info("Initializing message system...");
-        }
-        messages = new Messages();
-        messages.setLanguage(settings.getLanguage());
-
-        // Now we can use localized messages
-        if (logger.isInfoEnabled()) {
-            logger.info(messages.get("plugin.initialization.loading_config"));
-            logger.info(messages.get("plugin.initialization.init_messages"));
+        logger.info("💬 [2/8] Initializing message system...");
+        long startTime = System.currentTimeMillis();
+        
+        String language = settings.getLanguage();
+        
+        try {
+            messages = new Messages(dataDirectory, language);
+            logger.info("✅ Message system initialized in {} ms (Language: {}, External files: enabled)", 
+                    System.currentTimeMillis() - startTime, language);
+        } catch (Exception e) {
+            logger.error("Failed to initialize external language files, falling back to JAR-embedded files", e);
+            messages = new Messages();
+            messages.setLanguage(language);
+            logger.info("✅ Message system initialized in {} ms (Language: {}, External files: disabled)", 
+                    System.currentTimeMillis() - startTime, language);
         }
     }
 
     private void initializeDatabase() {
-        if (logger.isInfoEnabled()) {
-            logger.info(messages.get("plugin.initialization.init_database"));
-        }
+        logger.info("🗄️ [3/8] Initializing database connection...");
+        long startTime = System.currentTimeMillis();
+        
         DatabaseConfig dbConfig = createDatabaseConfig();
         databaseManager = new DatabaseManager(dbConfig, messages);
 
@@ -231,56 +268,92 @@ public class VeloAuth {
         if (!dbInitialized) {
             throw VeloAuthException.database("initialization", null);
         }
+        
+        logger.info("✅ Database initialized in {} ms (Type: {})", 
+                System.currentTimeMillis() - startTime, settings.getDatabaseStorageType());
     }
 
     private void initializeCache() {
-        if (logger.isInfoEnabled()) {
-            logger.info(messages.get("plugin.initialization.init_cache"));
-        }
+        logger.info("💾 [4/8] Initializing authentication cache...");
+        long startTime = System.currentTimeMillis();
+        
         authCache = new AuthCache(
                 settings.getCacheTtlMinutes(),
                 settings.getCacheMaxSize(),
                 settings.getCacheMaxSize(), // maxSessions - użyj tej samej wartości co maxSize
-                settings.getCacheMaxSize(), // maxPremiumCache - użyj tej samej wartości co maxSize
+                10000, // maxPremiumCache - set to 10000 as per requirement 6.5
                 settings.getBruteForceMaxAttempts(),
                 settings.getBruteForceTimeoutMinutes(),
                 settings.getCacheCleanupIntervalMinutes(),
                 settings,
                 messages
         );
+        
+        // Set AuthCache reference in DatabaseManager for cache invalidation coordination
+        if (databaseManager != null) {
+            databaseManager.setAuthCacheReference(authCache);
+            logger.debug("AuthCache reference set in DatabaseManager");
+        }
+        
+        logger.info("✅ Cache initialized in {} ms (TTL: {} min, Max size: {}, Premium cache: 10000)", 
+                System.currentTimeMillis() - startTime, 
+                settings.getCacheTtlMinutes(), 
+                settings.getCacheMaxSize());
     }
 
     private void initializeCommands() {
-        if (logger.isInfoEnabled()) {
-            logger.info(messages.get("plugin.initialization.registering_commands"));
-        }
+        logger.info("⌨️ [5/8] Registering commands...");
+        long startTime = System.currentTimeMillis();
+        
         commandHandler = new CommandHandler(this, databaseManager, authCache, settings, messages);
         commandHandler.registerCommands();
+        
+        logger.info("✅ Commands registered in {} ms", System.currentTimeMillis() - startTime);
     }
 
     private void initializeConnectionManager() {
-        if (logger.isInfoEnabled()) {
-            logger.info(messages.get("plugin.initialization.init_connection_manager"));
-        }
+        logger.info("🔌 [6/8] Initializing connection manager...");
+        long startTime = System.currentTimeMillis();
+        
         connectionManager = new ConnectionManager(this, databaseManager, authCache, settings, messages);
+        
+        logger.info("✅ Connection manager initialized in {} ms", System.currentTimeMillis() - startTime);
     }
 
     private void initializePremiumResolver() {
-        if (logger.isInfoEnabled()) {
-            logger.info(messages.get("plugin.initialization.init_premium_resolver"));
-        }
+        logger.info("👑 [7/8] Initializing premium resolver service...");
+        long startTime = System.currentTimeMillis();
+        
         premiumResolverService = new PremiumResolverService(logger, settings, databaseManager.getPremiumUuidDao());
+        
+        logger.info("✅ Premium resolver initialized in {} ms (Enabled: {})", 
+                System.currentTimeMillis() - startTime, 
+                settings.isPremiumCheckEnabled());
     }
 
     private void initializeListeners() {
-        if (logger.isInfoEnabled()) {
-            logger.info(messages.get("plugin.initialization.registering_listeners"));
-        }
-        authListener = new AuthListener(this, connectionManager, authCache, settings, premiumResolverService, databaseManager, messages);
+        logger.info("🎧 [8/8] Registering event listeners...");
+        long startTime = System.currentTimeMillis();
+        
+        // CRITICAL: Create handlers BEFORE AuthListener
+        PreLoginHandler preLoginHandler = new PreLoginHandler(
+            authCache, premiumResolverService, databaseManager,
+            settings, messages, logger);
+        logger.debug("PreLoginHandler created successfully");
+        
+        PostLoginHandler postLoginHandler = new PostLoginHandler(
+            this, authCache, connectionManager, databaseManager,
+            messages, logger);
+        logger.debug("PostLoginHandler created successfully");
+        
+        // Create AuthListener with initialized handlers
+        authListener = new AuthListener(
+            this, connectionManager, authCache, settings,
+            preLoginHandler, postLoginHandler, databaseManager, messages);
+        
         server.getEventManager().register(this, authListener);
-        if (logger.isInfoEnabled()) {
-            logger.info("✅ Full AuthListener registered after initialization");
-        }
+        logger.info("✅ Event listeners registered in {} ms (PreLoginHandler + PostLoginHandler + AuthListener)", 
+                System.currentTimeMillis() - startTime);
     }
 
     private void debugServers() {
@@ -311,17 +384,19 @@ public class VeloAuth {
         } else {
             // Remote databases - use HikariCP for better performance
             return DatabaseConfig.forRemoteWithHikari(
-                    storageType,
-                    settings.getDatabaseHostname(),
-                    settings.getDatabasePort(),
-                    settings.getDatabaseName(),
-                    settings.getDatabaseUser(),
-                    settings.getDatabasePassword(),
-                    settings.getDatabaseConnectionPoolSize(),
-                    (int) settings.getDatabaseMaxLifetimeMillis(), // Cast long to int for HikariCP
-                    settings.getDatabaseConnectionParameters(),
-                    settings.getPostgreSQLSettings(),
-                    settings.isDebugEnabled()
+                    HikariConfigParams.builder()
+                            .storageType(storageType)
+                            .hostname(settings.getDatabaseHostname())
+                            .port(settings.getDatabasePort())
+                            .database(settings.getDatabaseName())
+                            .user(settings.getDatabaseUser())
+                            .password(settings.getDatabasePassword())
+                            .connectionPoolSize(settings.getDatabaseConnectionPoolSize())
+                            .maxLifetime((int) settings.getDatabaseMaxLifetimeMillis())
+                            .connectionParameters(settings.getDatabaseConnectionParameters())
+                            .postgreSQLSettings(settings.getPostgreSQLSettings())
+                            .debugEnabled(settings.isDebugEnabled())
+                            .build()
             );
         }
     }
@@ -330,7 +405,9 @@ public class VeloAuth {
      * Zamyka wszystkie komponenty pluginu z graceful shutdown.
      */
     private void shutdown() {
+        // CRITICAL: Set initialized flag to FALSE immediately to reject new operations
         initialized = false;
+        logger.info("🔴 Initialization flag set to FALSE - blocking all new player connections");
 
         try {
             logger.info("Inicjowanie graceful shutdown VeloAuth...");
@@ -409,7 +486,7 @@ public class VeloAuth {
     }
 
     /**
-     * Przeładowuje konfigurację pluginu.
+     * Przeładowuje konfigurację pluginu i pliki językowe.
      *
      * @return true jeśli sukces
      */
@@ -419,12 +496,18 @@ public class VeloAuth {
                 logger.info(messages.get("config.reloading"));
             }
 
-            if (settings.load()) {
+            // Reload configuration
+            boolean configReloaded = settings.load();
+            
+            // Reload language files
+            boolean languageReloaded = reloadLanguageFiles();
+
+            if (configReloaded) {
                 if (logger.isInfoEnabled()) {
                     logger.info(messages.get("config.reloaded_success"));
                 }
                 logStartupInfo();
-                return true;
+                return languageReloaded; // Return true only if both succeeded
             } else {
                 if (logger.isErrorEnabled()) {
                     logger.error(messages.get("config.reload_failed"));

@@ -4,5 +4,6 @@
     "sonarlint.connectedMode.project": {
         "connectionId": "rafalohaki",
         "projectKey": "rafalohaki_VeloAuth"
-    }
+    },
+    "kiroAgent.configureMCP": "Enabled"
 }

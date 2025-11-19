@@ -109,12 +109,29 @@ public final class CommandHelper {
      */
     public static void runAsyncCommand(Runnable task, Messages messages,
                                        CommandSource source, String errorKey) {
-        // skipcq: JAVA-W1087 - Future handled with exceptionally, fire-and-forget operation
-        CompletableFuture.runAsync(task, VirtualThreadExecutorProvider.getVirtualExecutor())
-                .exceptionally(throwable -> {
-                    source.sendMessage(ValidationUtils.createErrorComponent(messages.get(errorKey)));
-                    return null;
-                });
+        try {
+            // Check if executor is shutting down
+            if (VirtualThreadExecutorProvider.isShutdown()) {
+                source.sendMessage(ValidationUtils.createErrorComponent(
+                        "Serwer się wyłącza. Spróbuj ponownie później."));
+                return;
+            }
+
+            // skipcq: JAVA-W1087 - Future handled with exceptionally, fire-and-forget operation
+            CompletableFuture.runAsync(task, VirtualThreadExecutorProvider.getVirtualExecutor())
+                    .exceptionally(throwable -> {
+                        if (throwable instanceof java.util.concurrent.RejectedExecutionException) {
+                            source.sendMessage(ValidationUtils.createErrorComponent(
+                                    "Serwer jest przeciążony. Spróbuj ponownie za chwilę."));
+                        } else {
+                            source.sendMessage(ValidationUtils.createErrorComponent(messages.get(errorKey)));
+                        }
+                        return null;
+                    });
+        } catch (java.util.concurrent.RejectedExecutionException e) {
+            source.sendMessage(ValidationUtils.createErrorComponent(
+                    "Serwer się wyłącza. Spróbuj ponownie później."));
+        }
     }
 
     /**
@@ -128,16 +145,31 @@ public final class CommandHelper {
      */
     public static void runAsyncCommandWithTimeout(Runnable task, Messages messages,
                                                   CommandSource source, String errorKey, String timeoutKey) {
-        // skipcq: JAVA-W1087 - Future handled with exceptionally, fire-and-forget operation
-        CompletableFuture.runAsync(task, VirtualThreadExecutorProvider.getVirtualExecutor())
-                .orTimeout(30, java.util.concurrent.TimeUnit.SECONDS)
-                .exceptionally(throwable -> {
-                    if (throwable instanceof java.util.concurrent.TimeoutException) {
-                        source.sendMessage(ValidationUtils.createErrorComponent(messages.get(timeoutKey)));
-                    } else {
-                        source.sendMessage(ValidationUtils.createErrorComponent(messages.get(errorKey)));
-                    }
-                    return null;
-                });
+        try {
+            // Check if executor is shutting down
+            if (VirtualThreadExecutorProvider.isShutdown()) {
+                source.sendMessage(ValidationUtils.createErrorComponent(
+                        "Serwer się wyłącza. Spróbuj ponownie później."));
+                return;
+            }
+
+            // skipcq: JAVA-W1087 - Future handled with exceptionally, fire-and-forget operation
+            CompletableFuture.runAsync(task, VirtualThreadExecutorProvider.getVirtualExecutor())
+                    .orTimeout(30, java.util.concurrent.TimeUnit.SECONDS)
+                    .exceptionally(throwable -> {
+                        if (throwable instanceof java.util.concurrent.TimeoutException) {
+                            source.sendMessage(ValidationUtils.createErrorComponent(messages.get(timeoutKey)));
+                        } else if (throwable instanceof java.util.concurrent.RejectedExecutionException) {
+                            source.sendMessage(ValidationUtils.createErrorComponent(
+                                    "Serwer jest przeciążony. Spróbuj ponownie za chwilę."));
+                        } else {
+                            source.sendMessage(ValidationUtils.createErrorComponent(messages.get(errorKey)));
+                        }
+                        return null;
+                    });
+        } catch (java.util.concurrent.RejectedExecutionException e) {
+            source.sendMessage(ValidationUtils.createErrorComponent(
+                    "Serwer się wyłącza. Spróbuj ponownie później."));
+        }
     }
 }

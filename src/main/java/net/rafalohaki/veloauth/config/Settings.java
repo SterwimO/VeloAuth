@@ -44,6 +44,8 @@ public class Settings {
     private int cacheTtlMinutes = 60;
     private int cacheMaxSize = 10000;
     private int cacheCleanupIntervalMinutes = 5;
+    private int premiumTtlHours = 24;
+    private double premiumRefreshThreshold = 0.8;
     // PicoLimbo settings
     private String picoLimboServerName = "lobby";
     private int picoLimboTimeoutSeconds = 300;
@@ -179,6 +181,8 @@ public class Settings {
                   ttl-minutes: 60 # Cache entry lifetime
                   max-size: 10000 # Maximum cached records
                   cleanup-interval-minutes: 5 # Cleanup scheduler interval
+                  premium-ttl-hours: 24 # Premium status cache TTL in hours (default: 24)
+                  premium-refresh-threshold: 0.8 # Background refresh threshold (0.0-1.0, default: 0.8)
                 
                 # PicoLimbo integration (fallback server for unauthenticated players)
                 picolimbo:
@@ -387,6 +391,8 @@ public class Settings {
             cacheTtlMinutes = getInt(cache, "ttl-minutes", cacheTtlMinutes);
             cacheMaxSize = getInt(cache, "max-size", cacheMaxSize);
             cacheCleanupIntervalMinutes = getInt(cache, "cleanup-interval-minutes", cacheCleanupIntervalMinutes);
+            premiumTtlHours = getInt(cache, "premium-ttl-hours", premiumTtlHours);
+            premiumRefreshThreshold = getDouble(cache, "premium-refresh-threshold", premiumRefreshThreshold);
         }
     }
 
@@ -494,6 +500,12 @@ public class Settings {
         }
         if (cacheCleanupIntervalMinutes <= 0) {
             throw new IllegalArgumentException("Cache cleanup interval musi być > 0");
+        }
+        if (premiumTtlHours <= 0) {
+            throw new IllegalArgumentException("Premium TTL hours musi być > 0");
+        }
+        if (premiumRefreshThreshold < 0.0 || premiumRefreshThreshold > 1.0) {
+            throw new IllegalArgumentException("Premium refresh threshold musi być w zakresie 0.0-1.0");
         }
     }
 
@@ -603,42 +615,110 @@ public class Settings {
     // Utility methods dla parsowania YAML
 
     private String getString(Map<String, Object> map, String key, String defaultValue) {
+        if (map == null || key == null) {
+            logger.warn("Null map or key in getString, using default: {}", defaultValue);
+            return defaultValue;
+        }
         Object value = map.get(key);
-        return value != null ? value.toString() : defaultValue;
+        if (value == null) {
+            return defaultValue;
+        }
+        try {
+            return value.toString();
+        } catch (Exception e) {
+            logger.warn("Error converting value to string for key '{}', using default: {}", key, defaultValue);
+            return defaultValue;
+        }
     }
 
     private int getInt(Map<String, Object> map, String key, int defaultValue) {
+        if (map == null || key == null) {
+            logger.warn("Null map or key in getInt, using default: {}", defaultValue);
+            return defaultValue;
+        }
         Object value = map.get(key);
+        if (value == null) {
+            return defaultValue;
+        }
         if (value instanceof Number number) {
             return number.intValue();
         }
-        return defaultValue;
+        try {
+            return Integer.parseInt(value.toString());
+        } catch (NumberFormatException e) {
+            logger.warn("Invalid integer value for key '{}': {}, using default: {}", key, value, defaultValue);
+            return defaultValue;
+        }
     }
 
     private long getLong(Map<String, Object> map, String key, long defaultValue) {
+        if (map == null || key == null) {
+            logger.warn("Null map or key in getLong, using default: {}", defaultValue);
+            return defaultValue;
+        }
         Object value = map.get(key);
+        if (value == null) {
+            return defaultValue;
+        }
         if (value instanceof Number number) {
             return number.longValue();
         }
-        return defaultValue;
+        try {
+            return Long.parseLong(value.toString());
+        } catch (NumberFormatException e) {
+            logger.warn("Invalid long value for key '{}': {}, using default: {}", key, value, defaultValue);
+            return defaultValue;
+        }
     }
 
     private boolean getBoolean(Map<String, Object> map, String key, boolean defaultValue) {
+        if (map == null || key == null) {
+            logger.warn("Null map or key in getBoolean, using default: {}", defaultValue);
+            return defaultValue;
+        }
         Object value = map.get(key);
+        if (value == null) {
+            return defaultValue;
+        }
         if (value instanceof Boolean bool) {
             return bool;
         }
-        return defaultValue;
+        try {
+            return Boolean.parseBoolean(value.toString());
+        } catch (Exception e) {
+            logger.warn("Invalid boolean value for key '{}': {}, using default: {}", key, value, defaultValue);
+            return defaultValue;
+        }
+    }
+
+    private double getDouble(Map<String, Object> map, String key, double defaultValue) {
+        if (map == null || key == null) {
+            logger.warn("Null map or key in getDouble, using default: {}", defaultValue);
+            return defaultValue;
+        }
+        Object value = map.get(key);
+        if (value == null) {
+            return defaultValue;
+        }
+        if (value instanceof Number number) {
+            return number.doubleValue();
+        }
+        try {
+            return Double.parseDouble(value.toString());
+        } catch (NumberFormatException e) {
+            logger.warn("Invalid double value for key '{}': {}, using default: {}", key, value, defaultValue);
+            return defaultValue;
+        }
     }
 
     // Gettery dla wszystkich ustawień
 
     public String getDatabaseStorageType() {
-        return databaseStorageType;
+        return databaseStorageType != null ? databaseStorageType : DatabaseType.H2.getName();
     }
 
     public String getDatabaseHostname() {
-        return databaseHostname;
+        return databaseHostname != null ? databaseHostname : "localhost";
     }
 
     public int getDatabasePort() {
@@ -646,15 +726,15 @@ public class Settings {
     }
 
     public String getDatabaseName() {
-        return databaseName;
+        return databaseName != null ? databaseName : "veloauth";
     }
 
     public String getDatabaseUser() {
-        return databaseUser;
+        return databaseUser != null ? databaseUser : "veloauth";
     }
 
     public String getDatabasePassword() {
-        return databasePassword;
+        return databasePassword != null ? databasePassword : "";
     }
 
     public String getDatabaseConnectionUrl() {
@@ -662,7 +742,7 @@ public class Settings {
     }
 
     public String getDatabaseConnectionParameters() {
-        return databaseConnectionParameters;
+        return databaseConnectionParameters != null ? databaseConnectionParameters : "";
     }
 
     public int getDatabaseConnectionPoolSize() {
@@ -689,8 +769,16 @@ public class Settings {
         return cacheCleanupIntervalMinutes;
     }
 
+    public int getPremiumTtlHours() {
+        return premiumTtlHours;
+    }
+
+    public double getPremiumRefreshThreshold() {
+        return premiumRefreshThreshold;
+    }
+
     public String getPicoLimboServerName() {
-        return picoLimboServerName;
+        return picoLimboServerName != null ? picoLimboServerName : "lobby";
     }
 
     public int getPicoLimboTimeoutSeconds() {

@@ -15,12 +15,33 @@ import java.util.List;
 import java.util.Objects;
 
 /**
- * JDBC DAO obsługujący gorące ścieżki logowania/rejestracji bez narzutu ORMLite.
- * Thread-safe: bez stanu mutowalnego, każde wywołanie korzysta z własnego Connection.
+ * JDBC DAO obsługujący gorące ścieżki logowania/rejestracji bez narzutu
+ * ORMLite.
+ * Thread-safe: bez stanu mutowalnego, każde wywołanie korzysta z własnego
+ * Connection.
  */
 public final class JdbcAuthDao {
 
     private static final Logger logger = LoggerFactory.getLogger(JdbcAuthDao.class);
+
+    // Table name constant
+    private static final String TABLE_AUTH = "AUTH";
+
+    // Column name constants - synchronized with RegisteredPlayer ORMLite annotations
+    private static final String COL_NICKNAME = "NICKNAME";
+    private static final String COL_LOWERCASE_NICKNAME = "LOWERCASENICKNAME";
+    private static final String COL_HASH = "HASH";
+    private static final String COL_IP = "IP";
+    private static final String COL_LOGIN_IP = "LOGINIP";
+    private static final String COL_UUID = "UUID";
+    private static final String COL_REG_DATE = "REGDATE";
+    private static final String COL_LOGIN_DATE = "LOGINDATE";
+    private static final String COL_PREMIUM_UUID = "PREMIUMUUID";
+    private static final String COL_TOTP_TOKEN = "TOTPTOKEN";
+    private static final String COL_ISSUED_TIME = "ISSUEDTIME";
+    private static final String COL_CONFLICT_MODE = "CONFLICT_MODE";
+    private static final String COL_CONFLICT_TIMESTAMP = "CONFLICT_TIMESTAMP";
+    private static final String COL_ORIGINAL_NICKNAME = "ORIGINAL_NICKNAME";
 
     // SQL fragment constants
     private static final String WHERE_CLAUSE = " WHERE ";
@@ -39,18 +60,18 @@ public final class JdbcAuthDao {
         this.config = Objects.requireNonNull(config, "config nie może być null");
         this.postgres = DatabaseType.POSTGRESQL.getName().equalsIgnoreCase(config.getStorageType());
 
-        String authTable = table("AUTH");
-        String nicknameColumn = column("NICKNAME");
-        String lowercaseNicknameColumn = column("LOWERCASENICKNAME");
-        String hashColumn = column("HASH");
-        String ipColumn = column("IP");
-        String loginIpColumn = column("LOGINIP");
-        String uuidColumn = column("UUID");
-        String regDateColumn = column("REGDATE");
-        String loginDateColumn = column("LOGINDATE");
-        String premiumUuidColumn = column("PREMIUMUUID");
-        String totpTokenColumn = column("TOTPTOKEN");
-        String issuedTimeColumn = column("ISSUEDTIME");
+        String authTable = table(TABLE_AUTH);
+        String nicknameColumn = column(COL_NICKNAME);
+        String lowercaseNicknameColumn = column(COL_LOWERCASE_NICKNAME);
+        String hashColumn = column(COL_HASH);
+        String ipColumn = column(COL_IP);
+        String loginIpColumn = column(COL_LOGIN_IP);
+        String uuidColumn = column(COL_UUID);
+        String regDateColumn = column(COL_REG_DATE);
+        String loginDateColumn = column(COL_LOGIN_DATE);
+        String premiumUuidColumn = column(COL_PREMIUM_UUID);
+        String totpTokenColumn = column(COL_TOTP_TOKEN);
+        String issuedTimeColumn = column(COL_ISSUED_TIME);
 
         this.selectPlayerSql = "SELECT " + joinColumns(
                 nicknameColumn,
@@ -63,8 +84,7 @@ public final class JdbcAuthDao {
                 loginDateColumn,
                 premiumUuidColumn,
                 totpTokenColumn,
-                issuedTimeColumn
-        ) + " FROM " + authTable + WHERE_CLAUSE + lowercaseNicknameColumn + " = ?";
+                issuedTimeColumn) + " FROM " + authTable + WHERE_CLAUSE + lowercaseNicknameColumn + " = ?";
 
         this.insertPlayerSql = "INSERT INTO " + authTable + " (" + joinColumns(
                 lowercaseNicknameColumn,
@@ -77,8 +97,7 @@ public final class JdbcAuthDao {
                 loginDateColumn,
                 premiumUuidColumn,
                 totpTokenColumn,
-                issuedTimeColumn
-        ) + ") VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)";
+                issuedTimeColumn) + ") VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)";
 
         this.updatePlayerSql = "UPDATE " + authTable + " SET " +
                 nicknameColumn + COMMA_SPACE_EQUALS_QUESTION +
@@ -98,7 +117,7 @@ public final class JdbcAuthDao {
     public RegisteredPlayer findPlayerByLowercaseNickname(String lowercaseNickname) throws SQLException {
         // SQL Injection safe: Using PreparedStatement with parameter binding
         try (Connection connection = openConnection();
-             PreparedStatement statement = connection.prepareStatement(selectPlayerSql)) {
+                PreparedStatement statement = connection.prepareStatement(selectPlayerSql)) {
 
             statement.setString(1, lowercaseNickname);
 
@@ -136,7 +155,7 @@ public final class JdbcAuthDao {
     public boolean deletePlayer(String lowercaseNickname) throws SQLException {
         // SQL Injection safe: Using PreparedStatement with parameter binding
         try (Connection connection = openConnection();
-             PreparedStatement statement = connection.prepareStatement(deletePlayerSql)) {
+                PreparedStatement statement = connection.prepareStatement(deletePlayerSql)) {
 
             statement.setString(1, lowercaseNickname);
             return statement.executeUpdate() > 0;
@@ -163,7 +182,6 @@ public final class JdbcAuthDao {
             return false;
         }
     }
-
 
     private int executeUpdate(Connection connection, RegisteredPlayer player) throws SQLException {
         // SQL Injection safe: Using PreparedStatement with parameter binding
@@ -213,7 +231,7 @@ public final class JdbcAuthDao {
         RegisteredPlayer player = new RegisteredPlayer();
         String nickname = null;
         try {
-            nickname = resultSet.getString("NICKNAME");
+            nickname = resultSet.getString(COL_NICKNAME);
             if (nickname != null && !nickname.isEmpty()) {
                 player.setNickname(nickname);
             }
@@ -225,39 +243,48 @@ public final class JdbcAuthDao {
         }
 
         // Hash może być null dla graczy premium (limboauth compatibility)
-        player.setHash(resultSet.getString("HASH"));
-        player.setIp(resultSet.getString("IP"));
-        player.setLoginIp(resultSet.getString("LOGINIP"));
-        player.setUuid(resultSet.getString("UUID"));
-        player.setRegDate(resultSet.getLong("REGDATE"));
-        player.setLoginDate(resultSet.getLong("LOGINDATE"));
+        player.setHash(resultSet.getString(COL_HASH));
+        player.setIp(resultSet.getString(COL_IP));
+        player.setLoginIp(resultSet.getString(COL_LOGIN_IP));
+        player.setUuid(resultSet.getString(COL_UUID));
+        player.setRegDate(resultSet.getLong(COL_REG_DATE));
+        player.setLoginDate(resultSet.getLong(COL_LOGIN_DATE));
 
         // Limboauth compatibility columns
-        player.setPremiumUuid(resultSet.getString("PREMIUMUUID"));
-        player.setTotpToken(resultSet.getString("TOTPTOKEN"));
-        player.setIssuedTime(resultSet.getLong("ISSUEDTIME"));
+        player.setPremiumUuid(resultSet.getString(COL_PREMIUM_UUID));
+        player.setTotpToken(resultSet.getString(COL_TOTP_TOKEN));
+        player.setIssuedTime(resultSet.getLong(COL_ISSUED_TIME));
 
         return player;
     }
 
     /**
      * 🔥 ADMIN COMMAND: Finds all players in conflict mode.
-     * Uses fallback handling for shared LimboAuth databases without conflict columns.
+     * Uses fallback handling for shared LimboAuth databases without conflict
+     * columns.
      * 
-     * @return List of players with CONFLICT_MODE = true, or empty list if columns don't exist
+     * @return List of players with CONFLICT_MODE = true, or empty list if columns
+     *         don't exist
      */
     @SuppressWarnings("java:S2077") // Safe: table() and column() only use hardcoded constants, not user input
     public List<RegisteredPlayer> findAllPlayersInConflictMode() throws SQLException {
-        String conflictQuery = "SELECT NICKNAME, HASH, IP, LOGINIP, UUID, REGDATE, LOGINDATE, " +
-                              "PREMIUMUUID, TOTPTOKEN, ISSUEDTIME, LOWERCASENICKNAME, " +
-                              "CONFLICT_MODE, CONFLICT_TIMESTAMP, ORIGINAL_NICKNAME " +
-                              "FROM " + table("AUTH") + WHERE_CLAUSE + column("CONFLICT_MODE") + " = ?"; // NOSONAR - SQL from constants
-        
+        String conflictQuery = "SELECT " + column(COL_NICKNAME) + ", " + column(COL_HASH) + ", " + 
+                column(COL_IP) + ", " + column(COL_LOGIN_IP) + ", " + column(COL_UUID) + ", " + 
+                column(COL_REG_DATE) + ", " + column(COL_LOGIN_DATE) + ", " +
+                column(COL_PREMIUM_UUID) + ", " + column(COL_TOTP_TOKEN) + ", " + 
+                column(COL_ISSUED_TIME) + ", " + column(COL_LOWERCASE_NICKNAME) + ", " +
+                column(COL_CONFLICT_MODE) + ", " + column(COL_CONFLICT_TIMESTAMP) + ", " + 
+                column(COL_ORIGINAL_NICKNAME) + " " +
+                "FROM " + table(TABLE_AUTH) + WHERE_CLAUSE + column(COL_CONFLICT_MODE) + " = ?"; // NOSONAR - SQL from
+                                                                                           // constants
+
         try (Connection connection = openConnection();
-             PreparedStatement statement = connection.prepareStatement(conflictQuery)) { // NOSONAR - Uses PreparedStatement with parameters
-            
+                PreparedStatement statement = connection.prepareStatement(conflictQuery)) { // NOSONAR - Uses
+                                                                                            // PreparedStatement with
+                                                                                            // parameters
+
             statement.setBoolean(1, true);
-            
+
             try (ResultSet resultSet = statement.executeQuery()) { // NOSONAR - Parameterized query, SQL injection safe
                 List<RegisteredPlayer> conflicts = new ArrayList<>();
                 while (resultSet.next()) {
@@ -280,26 +307,26 @@ public final class JdbcAuthDao {
      */
     private RegisteredPlayer mapPlayerWithConflict(ResultSet resultSet) throws SQLException {
         RegisteredPlayer player = mapPlayer(resultSet);
-        
+
         // Conflict tracking fields (may not exist in pure LimboAuth databases)
         try {
-            player.setConflictMode(resultSet.getBoolean("CONFLICT_MODE"));
+            player.setConflictMode(resultSet.getBoolean(COL_CONFLICT_MODE));
         } catch (SQLException e) {
             player.setConflictMode(false); // Default if column doesn't exist
         }
-        
+
         try {
-            player.setConflictTimestamp(resultSet.getLong("CONFLICT_TIMESTAMP"));
+            player.setConflictTimestamp(resultSet.getLong(COL_CONFLICT_TIMESTAMP));
         } catch (SQLException e) {
             player.setConflictTimestamp(0L); // Default if column doesn't exist
         }
-        
+
         try {
-            player.setOriginalNickname(resultSet.getString("ORIGINAL_NICKNAME"));
+            player.setOriginalNickname(resultSet.getString(COL_ORIGINAL_NICKNAME));
         } catch (SQLException e) {
             player.setOriginalNickname(null); // Default if column doesn't exist
         }
-        
+
         return player;
     }
 
@@ -315,7 +342,6 @@ public final class JdbcAuthDao {
         }
         return DriverManager.getConnection(config.getJdbcUrl());
     }
-
 
     private String table(String name) {
         return postgres ? quote(name) : name;

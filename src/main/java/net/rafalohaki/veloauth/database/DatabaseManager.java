@@ -16,9 +16,11 @@ import org.slf4j.LoggerFactory;
 import org.slf4j.Marker;
 import org.slf4j.MarkerFactory;
 
+import java.lang.ref.WeakReference;
 import java.sql.SQLException;
 import java.util.Collection;
 import java.util.List;
+import java.util.UUID;
 import java.util.concurrent.Callable;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
@@ -33,6 +35,28 @@ import java.util.concurrent.locks.ReentrantLock;
  * Obsługuje PostgreSQL, MySQL, H2 i SQLite z automatycznym tworzeniem tabel.
  * <p>
  * Używa Virtual Threads dla wydajnych operacji I/O i ConcurrentHashMap dla cache.
+ * 
+ * <h2>Cache Invalidation Strategy</h2>
+ * DatabaseManager coordinates with AuthCache to maintain cache consistency:
+ * <ul>
+ *   <li><b>DatabaseManager.playerCache</b> - Stores RegisteredPlayer entities by lowercase nickname
+ *       for database query reduction. Updated immediately on save/delete operations.</li>
+ *   <li><b>AuthCache.authorizedPlayers</b> - Stores active session state by UUID.
+ *       Invalidated via {@link #notifyAuthCacheOfUpdate(RegisteredPlayer)} after successful
+ *       player data updates to force re-fetch from database on next access.</li>
+ * </ul>
+ * 
+ * <h3>Synchronization Points</h3>
+ * <ul>
+ *   <li>{@link #savePlayer(RegisteredPlayer)} - Updates playerCache and notifies AuthCache</li>
+ *   <li>{@link #deletePlayer(String)} - Removes from playerCache (AuthCache handles via session end)</li>
+ *   <li>{@link #clearCache()} - Clears playerCache only (AuthCache managed independently)</li>
+ * </ul>
+ * 
+ * <h3>Weak Reference Design</h3>
+ * Uses {@link WeakReference} to AuthCache to avoid circular dependency and allow
+ * garbage collection if AuthCache is no longer needed. Cache invalidation is
+ * best-effort - if AuthCache is GC'd, operations continue without invalidation.
  */
 public class DatabaseManager {
 
@@ -111,6 +135,12 @@ public class DatabaseManager {
      * Czy ostatni health check był pozytywny.
      */
     private volatile boolean lastHealthCheckPassed;
+    
+    /**
+     * Weak reference to AuthCache for cache invalidation coordination.
+     * Uses WeakReference to avoid circular dependency and allow GC if needed.
+     */
+    private WeakReference<net.rafalohaki.veloauth.cache.AuthCache> authCacheRef;
 
     /**
      * Tworzy nowy DatabaseManager.
@@ -514,6 +544,17 @@ public class DatabaseManager {
 
     /**
      * Zapisuje lub aktualizuje gracza w bazie danych z użyciem natywnego JDBC.
+     * 
+     * <p><b>Cache Invalidation Synchronization Point:</b>
+     * After successful save, this method:
+     * <ol>
+     *   <li>Updates DatabaseManager.playerCache with new data</li>
+     *   <li>Notifies AuthCache to invalidate cached player data via {@link #notifyAuthCacheOfUpdate(RegisteredPlayer)}</li>
+     * </ol>
+     * This ensures both caches remain consistent with database state.
+     * 
+     * @param player RegisteredPlayer to save or update
+     * @return CompletableFuture with DbResult indicating success or error
      */
     public CompletableFuture<DbResult<Boolean>> savePlayer(RegisteredPlayer player) {
         if (player == null) {
@@ -548,6 +589,9 @@ public class DatabaseManager {
                 if (logger.isDebugEnabled()) {
                     logger.debug(DB_MARKER, "Zapisano gracza (upsert): {}", player.getNickname());
                 }
+                
+                // Notify AuthCache of player data update for cache invalidation coordination
+                notifyAuthCacheOfUpdate(player);
             }
             return DbResult.success(success);
         } catch (SQLException e) {
@@ -555,6 +599,47 @@ public class DatabaseManager {
                 logger.error(DB_MARKER, "Błąd podczas zapisywania gracza: {}", player.getNickname(), e);
             }
             return DbResult.databaseError(messages.get(DATABASE_ERROR) + ": " + e.getMessage());
+        }
+    }
+    
+    /**
+     * Notifies AuthCache of player data update for cache invalidation.
+     * Uses weak reference to avoid circular dependency.
+     * Handles exceptions gracefully to prevent save operation failure.
+     * 
+     * @param player RegisteredPlayer that was updated
+     */
+    private void notifyAuthCacheOfUpdate(RegisteredPlayer player) {
+        if (authCacheRef == null) {
+            return;
+        }
+
+        try {
+            net.rafalohaki.veloauth.cache.AuthCache authCache = authCacheRef.get();
+            if (authCache == null) {
+                if (logger.isDebugEnabled()) {
+                    logger.debug(DB_MARKER, "AuthCache reference is null (GC collected) - skipping cache invalidation");
+                }
+                return;
+            }
+
+            UUID playerUuid = UUID.fromString(player.getUuid());
+            authCache.invalidatePlayerData(playerUuid);
+
+            if (logger.isDebugEnabled()) {
+                logger.debug(DB_MARKER, "Notified AuthCache of update for player: {} (UUID: {})",
+                        player.getNickname(), playerUuid);
+            }
+        } catch (IllegalArgumentException e) {
+            if (logger.isWarnEnabled()) {
+                logger.warn(DB_MARKER, "Failed to parse UUID for cache invalidation: {} - {}",
+                        player.getUuid(), e.getMessage());
+            }
+        } catch (Exception e) {
+            if (logger.isErrorEnabled()) {
+                logger.error(DB_MARKER, "Error notifying AuthCache of player update: {}",
+                        player.getNickname(), e);
+            }
         }
     }
 
@@ -792,6 +877,21 @@ public class DatabaseManager {
      */
     public PremiumUuidDao getPremiumUuidDao() {
         return premiumUuidDao;
+    }
+    
+    /**
+     * Sets the AuthCache reference for cache invalidation coordination.
+     * Uses WeakReference to avoid circular dependency.
+     * 
+     * @param authCache AuthCache instance to coordinate with
+     */
+    public void setAuthCacheReference(net.rafalohaki.veloauth.cache.AuthCache authCache) {
+        if (authCache != null) {
+            this.authCacheRef = new WeakReference<>(authCache);
+            if (logger.isDebugEnabled()) {
+                logger.debug(DB_MARKER, "AuthCache reference set for cache invalidation coordination");
+            }
+        }
     }
 
     /**
@@ -1127,11 +1227,17 @@ public class DatabaseManager {
      * when the database is unavailable. Without this distinction, a SQLException
      * could be interpreted as "player not found" and allow unauthorized access.
      *
+     * <p><b>IMPORTANT: Always check {@link #isSuccess()} or {@link #isDatabaseError()} 
+     * before calling {@link #getValue()}.</b> Calling getValue() on a database error 
+     * will return null, which could be misinterpreted as "not found".
+     *
      * <p>Usage examples:
      * <pre>{@code
+     * // CORRECT: Check for database error first
      * var result = databaseManager.findPlayerByNickname("player").join();
      * if (result.isDatabaseError()) {
      *     // Database unavailable - deny access for security
+     *     logger.error("Database error: {}", result.getErrorMessage());
      *     return false;
      * }
      * RegisteredPlayer player = result.getValue();
@@ -1140,6 +1246,16 @@ public class DatabaseManager {
      *     return false;
      * }
      * // Proceed with authentication
+     * 
+     * // ALTERNATIVE: Use isSuccess() pattern
+     * if (!result.isSuccess()) {
+     *     logger.error("Database error: {}", result.getErrorMessage());
+     *     return false;
+     * }
+     * RegisteredPlayer player = result.getValue();
+     * 
+     * // WRONG: Don't call getValue() without checking first
+     * RegisteredPlayer player = result.getValue(); // Could be null due to error OR not found!
      * }</pre>
      *
      * @param <T> the type of value returned by the database operation
@@ -1158,7 +1274,7 @@ public class DatabaseManager {
         /**
          * Creates a successful DbResult with the given value.
          *
-         * @param value the successful result value
+         * @param value the successful result value (may be null if not found)
          * @return DbResult indicating success
          */
         public static <T> DbResult<T> success(T value) {
@@ -1177,11 +1293,31 @@ public class DatabaseManager {
 
         /**
          * Gets the value from a successful database operation.
+         * <p>
+         * <b>WARNING:</b> Always check {@link #isSuccess()} or {@link #isDatabaseError()} 
+         * before calling this method. This method returns null for both database errors 
+         * and legitimate "not found" cases.
          *
-         * @return the operation result value, or null if this was an error
+         * @return the operation result value, or null if this was an error or not found
          */
+        @javax.annotation.Nullable
         public T getValue() {
             return value;
+        }
+
+        /**
+         * Gets the value from a successful database operation using Optional pattern.
+         * Returns empty Optional for both database errors and not found cases.
+         * <p>
+         * <b>NOTE:</b> This method does not distinguish between database errors and 
+         * not found. Use {@link #isDatabaseError()} first if you need to handle 
+         * errors differently.
+         *
+         * @return Optional containing the value if present, empty otherwise
+         */
+        @javax.annotation.Nonnull
+        public java.util.Optional<T> getValueOptional() {
+            return java.util.Objects.requireNonNull(java.util.Optional.ofNullable(value), "Optional cannot be null");
         }
 
         /**
@@ -1198,12 +1334,16 @@ public class DatabaseManager {
          *
          * @return the error message, or null if this was successful
          */
+        @javax.annotation.Nullable
         public String getErrorMessage() {
             return errorMessage;
         }
 
         /**
          * Checks if this result represents a successful operation.
+         * <p>
+         * <b>NOTE:</b> Success means no database error occurred. The value may still 
+         * be null if the requested entity was not found.
          *
          * @return true if operation succeeded, false for database error
          */

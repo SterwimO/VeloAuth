@@ -59,4 +59,16 @@ class TestDatabaseManager extends DatabaseManager {
         }
         return premiumResults.getOrDefault(username, CompletableFuture.completedFuture(DatabaseManager.DbResult.success(false)));
     }
+
+    @Override
+    public CompletableFuture<DatabaseManager.DbResult<RegisteredPlayer>> findPlayerWithRuntimeDetection(String username) {
+        // Delegate to findPlayerByNickname for test purposes
+        return findPlayerByNickname(username);
+    }
+
+    @Override
+    public CompletableFuture<DatabaseManager.DbResult<Boolean>> savePlayer(RegisteredPlayer player) {
+        // Mock save operation - always succeeds in tests
+        return CompletableFuture.completedFuture(DatabaseManager.DbResult.success(true));
+    }
 }

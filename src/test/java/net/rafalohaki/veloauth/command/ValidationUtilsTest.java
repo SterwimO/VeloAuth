@@ -2,6 +2,7 @@ package net.rafalohaki.veloauth.command;
 
 import com.velocitypowered.api.proxy.Player;
 import net.rafalohaki.veloauth.config.Settings;
+import net.rafalohaki.veloauth.util.PlayerAddressUtils;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -16,7 +17,6 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
-import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
 /**
@@ -120,7 +120,7 @@ class ValidationUtilsTest {
         InetSocketAddress socketAddress = new InetSocketAddress(address, 25565); // NOSONAR - Test data
         when(mockPlayer.getRemoteAddress()).thenReturn(socketAddress);
 
-        String result = ValidationUtils.getPlayerIp(mockPlayer);
+        String result = PlayerAddressUtils.getPlayerIp(mockPlayer);
 
         assertEquals(expectedIp, result);
     }
@@ -131,25 +131,9 @@ class ValidationUtilsTest {
         InetSocketAddress socketAddress = new InetSocketAddress(address, 25565);
         when(mockPlayer.getRemoteAddress()).thenReturn(socketAddress);
 
-        InetAddress result = ValidationUtils.getPlayerAddress(mockPlayer);
+        InetAddress result = PlayerAddressUtils.getPlayerAddress(mockPlayer);
 
         assertEquals(address, result);
-    }
-
-    @Test
-    void testValidatePlayerSource_Player_ReturnsSuccess() {
-        ValidationUtils.ValidationResult result = ValidationUtils.validatePlayerSource(mockPlayer);
-
-        assertTrue(result.valid());
-        assertNull(result.getErrorMessage());
-    }
-
-    @Test
-    void testValidatePlayerSource_NonPlayer_ReturnsError() {
-        ValidationUtils.ValidationResult result = ValidationUtils.validatePlayerSource(mock(com.velocitypowered.api.command.CommandSource.class));
-
-        assertFalse(result.valid());
-        assertEquals("Ta komenda jest tylko dla graczy!", result.getErrorMessage());
     }
 
     @Test

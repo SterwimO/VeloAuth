@@ -20,13 +20,33 @@ import java.util.concurrent.locks.ReentrantLock;
 /**
  * Thread-safe cache autoryzacji dla VeloAuth.
  * Używa ConcurrentHashMap dla bezpiecznego dostępu wielowątkowego i ReentrantLock
- * dla operacji krytycznych zgodnie z wzorcami z Neo4j Memory.
  * <p>
  * Cache przechowuje:
  * - Autoryzowanych graczy (UUID -> CachedAuthUser)
  * - Próby brute force (IP -> liczba prób)
  * - Premium graczy (nickname -> premium status)
  * - Aktywne sesje (UUID -> ActiveSession)
+ * 
+ * <h2>Cache Invalidation Strategy</h2>
+ * <p>
+ * AuthCache coordinates with DatabaseManager to maintain consistency:
+ * <ul>
+ *   <li><b>Automatic Invalidation</b> - {@link #invalidatePlayerData(UUID)} is called by
+ *       DatabaseManager after successful player data updates (password change, premium status change)</li>
+ *   <li><b>TTL-based Expiration</b> - Entries expire based on configured TTL and are removed
+ *       during periodic cleanup or on access</li>
+ *   <li><b>Manual Invalidation</b> - {@link #removeAuthorizedPlayer(UUID)} for explicit removal</li>
+ *   <li><b>Session Preservation</b> - Invalidation removes cached data but preserves active sessions
+ *       to avoid disconnecting players during data updates</li>
+ * </ul>
+ * 
+ * <h3>When Each Cache is Invalidated</h3>
+ * <ul>
+ *   <li><b>authorizedPlayers</b> - On player data update, TTL expiration, manual removal, or logout</li>
+ *   <li><b>premiumCache</b> - On TTL expiration (24h), manual removal, or LRU eviction</li>
+ *   <li><b>bruteForceAttempts</b> - On timeout expiration, successful login, or manual reset</li>
+ *   <li><b>activeSessions</b> - On player disconnect, session hijacking detection, or inactivity</li>
+ * </ul>
  * <p>
  * UWAGA: 757 linii jest uzasadnione - zarządzanie 4 różnymi typami cache
  * z odrębnymi wymaganiami (różne TTL, harmonogramy czyszczenia, metryki)
@@ -93,6 +113,16 @@ public class AuthCache {
     private final int bruteForceTimeoutMinutes;
 
     /**
+     * Premium cache TTL w godzinach.
+     */
+    private final int premiumTtlHours;
+
+    /**
+     * Premium cache refresh threshold (0.0-1.0).
+     */
+    private final double premiumRefreshThreshold;
+
+    /**
      * Scheduler dla czyszczenia cache.
      */
     private final ScheduledExecutorService cleanupScheduler;
@@ -147,6 +177,8 @@ public class AuthCache {
         this.maxPremiumCache = maxPremiumCache;
         this.maxLoginAttempts = maxLoginAttempts;
         this.bruteForceTimeoutMinutes = bruteForceTimeoutMinutes;
+        this.premiumTtlHours = settings.getPremiumTtlHours();
+        this.premiumRefreshThreshold = settings.getPremiumRefreshThreshold();
         this.settings = settings;
         this.messages = messages;
 
@@ -251,7 +283,8 @@ public class AuthCache {
      * @param uuid UUID gracza
      * @return CachedAuthUser lub null jeśli nie znaleziono lub wygasł
      */
-    public CachedAuthUser getAuthorizedPlayer(UUID uuid) {
+    @javax.annotation.Nullable
+    public CachedAuthUser getAuthorizedPlayer(@javax.annotation.Nullable UUID uuid) {
         if (uuid == null) {
             return null;
         }
@@ -291,6 +324,18 @@ public class AuthCache {
     }
 
     /**
+     * Finds an authorized player in cache using Optional pattern.
+     * This method provides null-safe access to cached player data.
+     *
+     * @param uuid UUID gracza
+     * @return Optional containing CachedAuthUser if found and valid, empty otherwise
+     */
+    @javax.annotation.Nonnull
+    public java.util.Optional<CachedAuthUser> findAuthorizedPlayer(@javax.annotation.Nullable UUID uuid) {
+        return java.util.Objects.requireNonNull(java.util.Optional.ofNullable(getAuthorizedPlayer(uuid)), "Optional cannot be null");
+    }
+
+    /**
      * Usuwa autoryzowanego gracza z cache.
      *
      * @param uuid UUID gracza
@@ -320,6 +365,32 @@ public class AuthCache {
 
         return user.matchesIp(currentIp);
     }
+    
+    /**
+     * Invalidates cached player data after database update.
+     * Removes player from authorizedPlayers cache to force re-fetch from database.
+     * Session remains active - only cached data is invalidated.
+     * 
+     * This method is called by DatabaseManager after successful player data save
+     * to ensure cache consistency with database state.
+     * 
+     * @param playerUuid UUID of the player whose data was updated
+     */
+    public void invalidatePlayerData(UUID playerUuid) {
+        if (playerUuid == null) {
+            return;
+        }
+        
+        CachedAuthUser user = authorizedPlayers.get(playerUuid);
+        if (user != null) {
+            authorizedPlayers.remove(playerUuid);
+            if (logger.isDebugEnabled()) {
+                logger.debug("Invalidated cached data for player UUID: {} (nickname: {})", 
+                        playerUuid, user.getNickname());
+            }
+        }
+        // Note: Session remains active in activeSessions - only cached data is invalidated
+    }
 
     /**
      * Usuwa gracza premium z cache.
@@ -340,7 +411,7 @@ public class AuthCache {
     }
 
     /**
-     * Dodaje gracza premium do cache.
+     * Dodaje gracza premium do cache z TTL 24 godziny.
      * Używane po weryfikacji premium status z Mojang API.
      *
      * @param nickname    Nickname gracza (case-insensitive)
@@ -356,11 +427,18 @@ public class AuthCache {
             evictOldestPremiumEntryAtomic();
         }
 
-        PremiumCacheEntry entry = new PremiumCacheEntry(premiumUuid != null, premiumUuid);
+        // Calculate TTL from config (in hours)
+        long ttl = TimeUnit.HOURS.toMillis(premiumTtlHours);
+        PremiumCacheEntry entry = new PremiumCacheEntry(premiumUuid != null, premiumUuid, ttl, premiumRefreshThreshold);
         premiumCache.put(key, entry);
 
         if (logger.isDebugEnabled()) {
-            logger.debug(messages.get("cache.debug.premium.added"), nickname, premiumUuid != null);
+            logger.debug("{} | nickname: {}, premium entry: {}, TTL: {}h, threshold: {}",
+                    messages.get("cache.debug.premium.added"),
+                    nickname,
+                    premiumUuid != null,
+                    premiumTtlHours,
+                    premiumRefreshThreshold);
         }
     }
 
@@ -459,27 +537,47 @@ public class AuthCache {
 
     /**
      * Sprawdza czy gracz ma premium (z cache).
+     * Automatycznie usuwa wygasłe wpisy.
      *
      * @param nickname Nickname gracza
      * @return PremiumCacheEntry lub null jeśli nie w cache lub wygasł
      */
-    public PremiumCacheEntry getPremiumStatus(String nickname) {
+    @javax.annotation.Nullable
+    public PremiumCacheEntry getPremiumStatus(@javax.annotation.Nullable String nickname) {
         if (nickname == null || nickname.isEmpty()) {
             return null;
         }
 
-        PremiumCacheEntry entry = premiumCache.get(nickname.toLowerCase());
+        String key = nickname.toLowerCase();
+        PremiumCacheEntry entry = premiumCache.get(key);
         if (entry == null) {
             return null;
         }
 
-        // Premium cache ma TTL 24h
-        if (entry.isExpired(24 * 60)) {
-            premiumCache.remove(nickname.toLowerCase());
+        // Check if entry is expired using new TTL-based method
+        if (entry.isExpired()) {
+            premiumCache.remove(key);
+            if (logger.isDebugEnabled()) {
+                logger.debug("Premium cache entry expired for {} (age: {}ms, TTL: {}ms)", 
+                        nickname, entry.getAgeMillis(), entry.getTtlMillis());
+            }
             return null;
         }
 
         return entry;
+    }
+
+    /**
+     * Finds premium status in cache using Optional pattern.
+     * This method provides null-safe access to premium cache data.
+     * Automatically removes expired entries.
+     *
+     * @param nickname Nickname gracza (case-insensitive)
+     * @return Optional containing PremiumCacheEntry if found and valid, empty otherwise
+     */
+    @javax.annotation.Nonnull
+    public java.util.Optional<PremiumCacheEntry> findPremiumStatus(@javax.annotation.Nullable String nickname) {
+        return java.util.Objects.requireNonNull(java.util.Optional.ofNullable(getPremiumStatus(nickname)), "Optional cannot be null");
     }
 
     /**
@@ -643,7 +741,7 @@ public class AuthCache {
                 int removedBrute = cleanupCache(bruteForceAttempts,
                         entry -> entry.getValue().isExpired(bruteForceTimeoutMinutes));
                 int removedPremium = cleanupCache(premiumCache,
-                        entry -> entry.getValue().isExpired(24 * 60));
+                        entry -> entry.getValue().isExpired());
                 int removedSessions = cleanupCache(activeSessions,
                         entry -> !entry.getValue().isActive(60));
 
@@ -709,14 +807,22 @@ public class AuthCache {
     }
 
     /**
-     * Usuwa najstarszy wpis premium cache przy przekroczeniu limitu.
+     * Usuwa najstarszy wpis premium cache przy przekroczeniu limitu (LRU eviction).
+     * Loguje eviction dla monitorowania.
      */
     private void evictOldestPremiumEntryAtomic() {
         var oldest = premiumCache.entrySet().stream()
-                .min(java.util.Comparator.comparingLong(e -> e.getValue().getCacheTime()))
+                .min(java.util.Comparator.comparingLong(e -> e.getValue().getTimestamp()))
                 .orElse(null);
         if (oldest != null) {
-            premiumCache.remove(oldest.getKey(), oldest.getValue());
+            String evictedKey = oldest.getKey();
+            PremiumCacheEntry evictedEntry = oldest.getValue();
+            premiumCache.remove(evictedKey, evictedEntry);
+            
+            if (logger.isDebugEnabled()) {
+                logger.debug("Premium cache LRU eviction: {} (age: {}ms, was premium: {})", 
+                        evictedKey, evictedEntry.getAgeMillis(), evictedEntry.isPremium());
+            }
         }
     }
 
@@ -838,17 +944,21 @@ public class AuthCache {
     }
 
     /**
-     * Wpis premium cache.
+     * Wpis premium cache z TTL.
      */
     public static class PremiumCacheEntry {
         private final boolean isPremium;
         private final UUID premiumUuid;
-        private final long cacheTime;
+        private final long timestamp;
+        private final long ttlMillis;
+        private final double refreshThreshold;
 
-        public PremiumCacheEntry(boolean isPremium, UUID premiumUuid) {
+        public PremiumCacheEntry(boolean isPremium, UUID premiumUuid, long ttlMillis, double refreshThreshold) {
             this.isPremium = isPremium;
             this.premiumUuid = premiumUuid;
-            this.cacheTime = System.currentTimeMillis();
+            this.timestamp = System.currentTimeMillis();
+            this.ttlMillis = ttlMillis;
+            this.refreshThreshold = refreshThreshold;
         }
 
         public boolean isPremium() {
@@ -859,13 +969,40 @@ public class AuthCache {
             return premiumUuid;
         }
 
-        public long getCacheTime() {
-            return cacheTime;
+        public long getTimestamp() {
+            return timestamp;
         }
 
-        public boolean isExpired(int ttlMinutes) {
-            long ttlMillis = ttlMinutes * 60L * 1000L;
-            return (System.currentTimeMillis() - cacheTime) > ttlMillis;
+        public long getTtlMillis() {
+            return ttlMillis;
+        }
+
+        /**
+         * Checks if the cache entry has expired based on its TTL.
+         *
+         * @return true if expired, false otherwise
+         */
+        public boolean isExpired() {
+            return System.currentTimeMillis() - timestamp > ttlMillis;
+        }
+
+        /**
+         * Checks if the cache entry is stale (reached configured threshold of TTL).
+         * Used to trigger background refresh while still using cached value.
+         *
+         * @return true if stale (age > threshold * TTL), false otherwise
+         */
+        public boolean isStale() {
+            return System.currentTimeMillis() - timestamp > (ttlMillis * refreshThreshold);
+        }
+
+        /**
+         * Gets the age of the cache entry in milliseconds.
+         *
+         * @return age in milliseconds
+         */
+        public long getAgeMillis() {
+            return System.currentTimeMillis() - timestamp;
         }
     }
 

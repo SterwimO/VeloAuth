@@ -11,6 +11,9 @@ import net.rafalohaki.veloauth.database.DatabaseManager;
 import net.rafalohaki.veloauth.i18n.Messages;
 import net.rafalohaki.veloauth.model.CachedAuthUser;
 import net.rafalohaki.veloauth.model.RegisteredPlayer;
+import net.rafalohaki.veloauth.util.DatabaseErrorHandler;
+import net.rafalohaki.veloauth.util.PlayerAddressUtils;
+import net.rafalohaki.veloauth.util.SecurityUtils;
 import org.slf4j.Logger;
 import org.slf4j.Marker;
 import org.slf4j.MarkerFactory;
@@ -133,7 +136,7 @@ public class CommandHandler {
             return null;
         }
 
-        InetAddress playerAddress = ValidationUtils.getPlayerAddress(player);
+        InetAddress playerAddress = PlayerAddressUtils.getPlayerAddress(player);
 
         // Check brute force protection
         if (playerAddress != null && authCache.isBlocked(playerAddress)) {
@@ -176,6 +179,7 @@ public class CommandHandler {
 
     /**
      * Handles database errors consistently across all commands.
+     * Delegates to DatabaseErrorHandler utility for standardized error handling.
      *
      * @param result    Database result to check
      * @param player    Player to send error message to
@@ -183,14 +187,7 @@ public class CommandHandler {
      * @return true if there was a database error (handled), false if operation can continue
      */
     private boolean handleDatabaseError(DatabaseManager.DbResult<?> result, Player player, String operation) {
-        if (result.isDatabaseError()) {
-            if (logger.isErrorEnabled()) {
-                logger.error(SECURITY_MARKER, "[DATABASE ERROR] {} failed for {}: {}", operation, player.getUsername(), result.getErrorMessage());
-            }
-            player.sendMessage(sm.errorDatabase());
-            return true;
-        }
-        return false;
+        return DatabaseErrorHandler.handleError(result, player, operation, logger, messages);
     }
 
     /**
@@ -233,7 +230,7 @@ public class CommandHandler {
             }
 
             // Additional login-specific checks
-            if (authCache.isPlayerAuthorized(player.getUniqueId(), ValidationUtils.getPlayerIp(player))) {
+            if (authCache.isPlayerAuthorized(player.getUniqueId(), PlayerAddressUtils.getPlayerIp(player))) {
                 player.sendMessage(ValidationUtils.createSuccessComponent(messages.get("auth.login.already_logged_in")));
                 return;
             }
@@ -251,7 +248,7 @@ public class CommandHandler {
         private void handleSuccessfulLogin(AuthenticationContext authContext) {
             try {
                 // Update login data
-                authContext.registeredPlayer.updateLoginData(ValidationUtils.getPlayerIp(authContext.player));
+                authContext.registeredPlayer.updateLoginData(PlayerAddressUtils.getPlayerIp(authContext.player));
                 var saveResult = databaseManager.savePlayer(authContext.registeredPlayer).join();
 
                 if (handleDatabaseError(saveResult, authContext.player, "Failed to save login data for")) {
@@ -269,13 +266,13 @@ public class CommandHandler {
                 authCache.addAuthorizedPlayer(authContext.player.getUniqueId(), cachedUser);
 
                 // Start session and reset security counters
-                authCache.startSession(authContext.player.getUniqueId(), authContext.username, ValidationUtils.getPlayerIp(authContext.player));
+                authCache.startSession(authContext.player.getUniqueId(), authContext.username, PlayerAddressUtils.getPlayerIp(authContext.player));
                 resetSecurityCounters(authContext.playerAddress);
 
                 authContext.player.sendMessage(sm.loginSuccess());
                 if (logger.isInfoEnabled()) {
                     logger.info(AUTH_MARKER, "Gracz {} zalogował się pomyślnie z IP {} - sesja rozpoczęta",
-                            authContext.username, ValidationUtils.getPlayerIp(authContext.player));
+                            authContext.username, PlayerAddressUtils.getPlayerIp(authContext.player));
                 }
 
                 plugin.getConnectionManager().transferToBackend(authContext.player);
@@ -289,31 +286,25 @@ public class CommandHandler {
         }
 
         private void handleFailedLogin(AuthenticationContext authContext) {
-            boolean blocked = false;
-            if (authContext.playerAddress != null) {
-                blocked = authCache.registerFailedLogin(authContext.playerAddress);
-            }
+            boolean blocked = SecurityUtils.registerFailedLogin(authContext.playerAddress, authCache);
 
             if (blocked) {
                 authContext.player.sendMessage(ValidationUtils.createErrorComponent(messages.get("security.brute_force.blocked")));
                 if (logger.isWarnEnabled()) {
                     logger.warn("Gracz {} zablokowany za brute force z IP {}",
-                            authContext.username, ValidationUtils.getPlayerIp(authContext.player));
+                            authContext.username, PlayerAddressUtils.getPlayerIp(authContext.player));
                 }
             } else {
                 authContext.player.sendMessage(sm.loginFailed());
                 if (logger.isDebugEnabled()) {
                     logger.debug("Nieudana próba logowania gracza {} z IP {}",
-                            authContext.username, ValidationUtils.getPlayerIp(authContext.player));
+                            authContext.username, PlayerAddressUtils.getPlayerIp(authContext.player));
                 }
             }
         }
 
         private void resetSecurityCounters(InetAddress playerAddress) {
-            if (playerAddress != null) {
-                authCache.resetLoginAttempts(playerAddress);
-                ipRateLimiter.reset(playerAddress);
-            }
+            SecurityUtils.resetSecurityCounters(playerAddress, authCache, ipRateLimiter);
         }
     }
 
@@ -379,7 +370,7 @@ public class CommandHandler {
 
             RegisteredPlayer newPlayer = new RegisteredPlayer(
                     authContext.username, hashedPassword,
-                    ValidationUtils.getPlayerIp(authContext.player),
+                    PlayerAddressUtils.getPlayerIp(authContext.player),
                     authContext.player.getUniqueId().toString()
             );
 
@@ -404,7 +395,7 @@ public class CommandHandler {
             boolean isPremium = Boolean.TRUE.equals(premiumResult.getValue());
             CachedAuthUser cachedUser = CachedAuthUser.fromRegisteredPlayer(newPlayer, isPremium);
             authCache.addAuthorizedPlayer(authContext.player.getUniqueId(), cachedUser);
-            authCache.startSession(authContext.player.getUniqueId(), authContext.username, ValidationUtils.getPlayerIp(authContext.player));
+            authCache.startSession(authContext.player.getUniqueId(), authContext.username, PlayerAddressUtils.getPlayerIp(authContext.player));
 
             // Reset security counters on success
             resetSecurityCounters(authContext.playerAddress);
@@ -412,17 +403,14 @@ public class CommandHandler {
             authContext.player.sendMessage(sm.registerSuccess());
             if (logger.isInfoEnabled()) {
                 logger.info(AUTH_MARKER, "Gracz {} zarejestrowany pomyślnie z IP {}",
-                        authContext.username, ValidationUtils.getPlayerIp(authContext.player));
+                        authContext.username, PlayerAddressUtils.getPlayerIp(authContext.player));
             }
 
             plugin.getConnectionManager().transferToBackend(authContext.player);
         }
 
         private void resetSecurityCounters(InetAddress playerAddress) {
-            if (playerAddress != null) {
-                authCache.resetLoginAttempts(playerAddress);
-                ipRateLimiter.reset(playerAddress);
-            }
+            SecurityUtils.resetSecurityCounters(playerAddress, authCache, ipRateLimiter);
         }
     }
 
@@ -530,13 +518,13 @@ public class CommandHandler {
                         p.disconnect(ValidationUtils.createWarningComponent(messages.get("general.kick.message")));
                         if (logger.isWarnEnabled()) {
                             logger.warn("Rozłączono duplikat gracza {} - zmiana hasła z IP {}",
-                                    ctx.username, ValidationUtils.getPlayerIp(ctx.player));
+                                    ctx.username, PlayerAddressUtils.getPlayerIp(ctx.player));
                         }
                     });
             ctx.player.sendMessage(ValidationUtils.createSuccessComponent(messages.get("auth.changepassword.success")));
             if (logger.isInfoEnabled()) {
                 logger.info(AUTH_MARKER, "Gracz {} zmienił hasło z IP {}",
-                        ctx.username, ValidationUtils.getPlayerIp(ctx.player));
+                        ctx.username, PlayerAddressUtils.getPlayerIp(ctx.player));
             }
         }
     }
@@ -624,13 +612,7 @@ public class CommandHandler {
         }
 
         private boolean handleDatabaseError(DatabaseManager.DbResult<?> result, CommandSource source, String nickname, String operation) {
-            if (result.isDatabaseError()) {
-                logger.error(SECURITY_MARKER, "[DATABASE ERROR] {} {}: {}",
-                        operation, nickname, result.getErrorMessage());
-                CommandHelper.sendError(source, messages, ERROR_DATABASE_QUERY);
-                return true;
-            }
-            return false;
+            return DatabaseErrorHandler.handleError(result, source, nickname, operation, logger, messages);
         }
 
         private UUID parsePlayerUuid(RegisteredPlayer registeredPlayer, String nickname, CommandSource source) {
