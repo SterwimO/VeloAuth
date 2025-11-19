@@ -281,7 +281,7 @@ public class CommandHandler {
                 if (logger.isErrorEnabled()) {
                     logger.error("Błąd podczas przetwarzania udanego logowania: {}", authContext.username, e);
                 }
-                authContext.player.sendMessage(ValidationUtils.createErrorComponent(messages.get(ERROR_DATABASE_QUERY)));
+                sendDatabaseErrorMessage(authContext.player);
             }
         }
 
@@ -382,7 +382,7 @@ public class CommandHandler {
 
             boolean saved = Boolean.TRUE.equals(saveResult.getValue());
             if (!saved) {
-                authContext.player.sendMessage(ValidationUtils.createErrorComponent(messages.get(ERROR_DATABASE_QUERY)));
+                sendDatabaseErrorMessage(authContext.player);
                 return;
             }
 
@@ -499,7 +499,7 @@ public class CommandHandler {
             }
             boolean saved = Boolean.TRUE.equals(saveResult.getValue());
             if (!saved) {
-                ctx.player.sendMessage(ValidationUtils.createErrorComponent(messages.get(ERROR_DATABASE_QUERY)));
+                sendDatabaseErrorMessage(ctx.player);
                 return false;
             }
             return true;
@@ -780,6 +780,16 @@ public class CommandHandler {
 
             return List.of();
         }
+    }
+
+    /**
+     * Sends a database error message to the player.
+     * Extracted method to reduce code duplication.
+     *
+     * @param player Player to send the message to
+     */
+    private void sendDatabaseErrorMessage(Player player) {
+        player.sendMessage(ValidationUtils.createErrorComponent(messages.get(ERROR_DATABASE_QUERY)));
     }
 
 }

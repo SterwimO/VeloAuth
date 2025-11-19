@@ -292,25 +292,30 @@ public final class DatabaseConfig {
         }
     }
 
-    @SuppressWarnings("java:S3776") // PostgreSQL SSL configuration - complexity 11, necessary for all SSL modes
     private static void configurePostgreSQLSsl(HikariConfig hikariConfig,
                                                net.rafalohaki.veloauth.config.Settings.PostgreSQLSettings postgreSQLSettings) {
         if (postgreSQLSettings != null && postgreSQLSettings.isSslEnabled()) {
             hikariConfig.addDataSourceProperty("ssl", "true");
             hikariConfig.addDataSourceProperty("sslmode", postgreSQLSettings.getSslMode());
 
-            if (postgreSQLSettings.getSslCert() != null && !postgreSQLSettings.getSslCert().isEmpty()) {
-                hikariConfig.addDataSourceProperty("sslcert", postgreSQLSettings.getSslCert());
-            }
-            if (postgreSQLSettings.getSslKey() != null && !postgreSQLSettings.getSslKey().isEmpty()) {
-                hikariConfig.addDataSourceProperty("sslkey", postgreSQLSettings.getSslKey());
-            }
-            if (postgreSQLSettings.getSslRootCert() != null && !postgreSQLSettings.getSslRootCert().isEmpty()) {
-                hikariConfig.addDataSourceProperty("sslrootcert", postgreSQLSettings.getSslRootCert());
-            }
-            if (postgreSQLSettings.getSslPassword() != null && !postgreSQLSettings.getSslPassword().isEmpty()) {
-                hikariConfig.addDataSourceProperty("sslpassword", postgreSQLSettings.getSslPassword());
-            }
+            addPropertyIfNotEmpty(hikariConfig, "sslcert", postgreSQLSettings.getSslCert());
+            addPropertyIfNotEmpty(hikariConfig, "sslkey", postgreSQLSettings.getSslKey());
+            addPropertyIfNotEmpty(hikariConfig, "sslrootcert", postgreSQLSettings.getSslRootCert());
+            addPropertyIfNotEmpty(hikariConfig, "sslpassword", postgreSQLSettings.getSslPassword());
+        }
+    }
+
+    /**
+     * Adds a data source property to HikariConfig if the value is not null and not empty.
+     * Helper method to reduce code duplication.
+     *
+     * @param hikariConfig HikariCP configuration
+     * @param propertyName Property name
+     * @param value Property value
+     */
+    private static void addPropertyIfNotEmpty(HikariConfig hikariConfig, String propertyName, String value) {
+        if (value != null && !value.isEmpty()) {
+            hikariConfig.addDataSourceProperty(propertyName, value);
         }
     }
 

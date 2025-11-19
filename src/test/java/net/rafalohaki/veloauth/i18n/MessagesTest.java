@@ -29,7 +29,7 @@ class MessagesTest {
 
     @Test
     void setLanguage_unsupportedLanguage_fallsBackToEnglish() {
-        messages.setLanguage("de");
+        messages.setLanguage("fr");
 
         assertEquals("en", messages.getCurrentLanguage());
     }
@@ -62,13 +62,17 @@ class MessagesTest {
 
     @Test
     void isLanguageSupported_recognizesSupportedLanguages() {
+        // Built-in languages from JAR resources (legacy mode)
         assertTrue(messages.isLanguageSupported("en"));
         assertTrue(messages.isLanguageSupported("pl"));
+        // Custom languages not available in legacy mode
         assertFalse(messages.isLanguageSupported("de"));
+        assertFalse(messages.isLanguageSupported("fr"));
     }
 
     @Test
     void getSupportedLanguages_returnsConsistentList() {
+        // Only built-in languages - custom languages can be added by users
         assertArrayEquals(new String[]{"en", "pl"}, messages.getSupportedLanguages());
     }
 }

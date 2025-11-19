@@ -91,7 +91,7 @@ class AuthenticationFlowIntegrationTest {
                     new net.rafalohaki.veloauth.database.PremiumUuidDao(cs);
             premiumResolverService = new PremiumResolverService(logger, settings, premiumDao);
         } catch (java.sql.SQLException e) {
-            throw new RuntimeException("Failed to initialize PremiumUuidDao", e);
+            throw new IllegalStateException("Failed to initialize PremiumUuidDao for test", e);
         }
         
         when(logger.isDebugEnabled()).thenReturn(false);

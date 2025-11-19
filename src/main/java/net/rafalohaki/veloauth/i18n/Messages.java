@@ -216,6 +216,8 @@ public class Messages {
 
     /**
      * Checks if a language is supported.
+     * For external file mode: checks if the language file exists.
+     * For legacy JAR mode: checks if the resource exists.
      *
      * @param language Language code to check
      * @return true if supported
@@ -224,13 +226,27 @@ public class Messages {
         if (language == null) return false;
 
         String lang = language.toLowerCase(Locale.ROOT);
-        return "en".equals(lang) || "pl".equals(lang);
+        
+        if (useExternalFiles && languageFileManager != null) {
+            // Check if language file exists in external directory
+            try {
+                languageFileManager.loadLanguageBundle(lang);
+                return true;
+            } catch (IOException e) {
+                return false;
+            }
+        } else {
+            // Legacy mode: check JAR resources (built-in languages only)
+            return "en".equals(lang) || "pl".equals(lang);
+        }
     }
 
     /**
      * Gets all supported language codes.
+     * Returns built-in languages (en, pl) - users can add custom languages by placing
+     * messages_*.properties files in the lang directory.
      *
-     * @return Array of supported language codes
+     * @return Array of built-in language codes
      */
     public String[] getSupportedLanguages() {
         return new String[]{"en", "pl"};
@@ -281,6 +297,7 @@ public class Messages {
 
     /**
      * Gets the language display name in English.
+     * Only includes built-in languages - custom languages will return the code.
      *
      * @param languageCode Language code
      * @return Display name or the code if not found
@@ -288,13 +305,14 @@ public class Messages {
     public String getLanguageDisplayName(String languageCode) {
         return switch (languageCode.toLowerCase(Locale.ROOT)) {
             case "en" -> "English";
-            case "pl" -> "Polski";
-            default -> languageCode;
+            case "pl" -> "Polish";
+            default -> languageCode; // Custom languages return their code
         };
     }
 
     /**
      * Gets the language display name in its native language.
+     * Only includes built-in languages - custom languages will return the code.
      *
      * @param languageCode Language code
      * @return Native display name or the code if not found
@@ -303,7 +321,7 @@ public class Messages {
         return switch (languageCode.toLowerCase(Locale.ROOT)) {
             case "en" -> "English";
             case "pl" -> "Polski";
-            default -> languageCode;
+            default -> languageCode; // Custom languages return their code
         };
     }
 }

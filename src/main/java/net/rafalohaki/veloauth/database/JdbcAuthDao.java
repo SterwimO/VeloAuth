@@ -15,10 +15,13 @@ import java.util.List;
 import java.util.Objects;
 
 /**
- * JDBC DAO obsługujący gorące ścieżki logowania/rejestracji bez narzutu
- * ORMLite.
- * Thread-safe: bez stanu mutowalnego, każde wywołanie korzysta z własnego
- * Connection.
+ * JDBC DAO obsługujący gorące ścieżki logowania/rejestracji bez narzutu ORMLite.
+ * Thread-safe: bez stanu mutowalnego, każde wywołanie korzysta z własnego Connection.
+ * <p>
+ * <b>SQL Injection Safety:</b> All database operations in this class use PreparedStatement
+ * with parameter binding to prevent SQL injection attacks. No user input is concatenated
+ * directly into SQL queries.
+ * </p>
  */
 public final class JdbcAuthDao {
 
@@ -115,7 +118,6 @@ public final class JdbcAuthDao {
     }
 
     public RegisteredPlayer findPlayerByLowercaseNickname(String lowercaseNickname) throws SQLException {
-        // SQL Injection safe: Using PreparedStatement with parameter binding
         try (Connection connection = openConnection();
                 PreparedStatement statement = connection.prepareStatement(selectPlayerSql)) {
 
@@ -153,7 +155,6 @@ public final class JdbcAuthDao {
     }
 
     public boolean deletePlayer(String lowercaseNickname) throws SQLException {
-        // SQL Injection safe: Using PreparedStatement with parameter binding
         try (Connection connection = openConnection();
                 PreparedStatement statement = connection.prepareStatement(deletePlayerSql)) {
 
@@ -184,7 +185,6 @@ public final class JdbcAuthDao {
     }
 
     private int executeUpdate(Connection connection, RegisteredPlayer player) throws SQLException {
-        // SQL Injection safe: Using PreparedStatement with parameter binding
         try (PreparedStatement statement = connection.prepareStatement(updatePlayerSql)) {
             bindUpdate(statement, player);
             return statement.executeUpdate();
@@ -192,7 +192,6 @@ public final class JdbcAuthDao {
     }
 
     private void executeInsert(Connection connection, RegisteredPlayer player) throws SQLException {
-        // SQL Injection safe: Using PreparedStatement with parameter binding
         try (PreparedStatement statement = connection.prepareStatement(insertPlayerSql)) {
             bindInsert(statement, player);
             statement.executeUpdate();

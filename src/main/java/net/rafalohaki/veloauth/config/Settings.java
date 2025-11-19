@@ -61,7 +61,7 @@ public class Settings {
     // Debug settings
     private boolean debugEnabled = false; // Default to false for production
     // Language settings
-    private String language = "en"; // Default language: en, pl
+    private String language = "en"; // Default language: en, pl (users can add custom language files)
 
     /**
      * Tworzy nowy Settings.
@@ -136,8 +136,9 @@ public class Settings {
                 # VeloAuth Configuration
                 # Complete Velocity Authentication Plugin
                 
-                # Language configuration (supported: en, pl)
+                # Language configuration (built-in: en, pl; custom languages supported)
                 language: en # Plugin language: en = English, pl = Polski
+                # To add custom language: create messages_XX.properties in plugins/VeloAuth/lang/
                 
                 # Debug settings (enable for detailed logging)
                 debug-enabled: false # Set to true for development/debugging
@@ -605,13 +606,12 @@ public class Settings {
             return;
         }
 
-        String normalizedLang = language.toLowerCase().trim();
-        if (!"en".equals(normalizedLang) && !"pl".equals(normalizedLang)) {
-            logger.warn("Unsupported language '{}', using default 'en'. Supported languages: en, pl", language);
-            language = "en";
-        } else {
-            language = normalizedLang;
-        }
+        // Normalize language code (lowercase, trimmed)
+        language = language.toLowerCase().trim();
+        
+        // No strict validation - any language with a messages_XX.properties file will work
+        // If the file doesn't exist, the system will fall back to English
+        logger.info("Language setting: {} (will fall back to 'en' if file not found)", language);
     }
 
     // Utility methods dla parsowania YAML

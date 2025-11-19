@@ -43,9 +43,10 @@ public final class LanguageFileManager {
             logger.info("Created language directory: {}", langDirectory);
         }
         
-        // Copy default language files from JAR if they don't exist
+        // Copy only built-in default language files from JAR if they don't exist
         copyDefaultLanguageFile("messages_en.properties");
         copyDefaultLanguageFile("messages_pl.properties");
+        // Users can add custom language files (e.g., messages_de.properties) to this directory
     }
     
     /**
