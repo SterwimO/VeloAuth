@@ -206,7 +206,7 @@ class VeloAuthIntegrationTest {
         assertDoesNotThrow(() -> {
             DatabaseManager.DbResult<Boolean> dbResult = premiumCheck.join();
             assertFalse(dbResult.isDatabaseError(), "Should not have database error");
-            assertTrue(Boolean.TRUE.equals(dbResult.getValue()), "Premium player should return true");
+            assertEquals(Boolean.TRUE, dbResult.getValue(), "Premium player should return true");
         });
 
         // No method verification on stub; ensure result is correct

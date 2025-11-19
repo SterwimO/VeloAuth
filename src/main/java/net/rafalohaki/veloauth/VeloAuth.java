@@ -48,7 +48,7 @@ import java.util.concurrent.CompletableFuture;
 @Plugin(
         id = "veloauth",
         name = "VeloAuth",
-        version = "1.0.0",
+        version = "1.0.1",
         description = "Complete Velocity Authentication Plugin with BCrypt, Virtual Threads and multi-database support",
         authors = {"Rafal"}
 )
@@ -338,7 +338,7 @@ public class VeloAuth {
         // CRITICAL: Create handlers BEFORE AuthListener
         PreLoginHandler preLoginHandler = new PreLoginHandler(
             authCache, premiumResolverService, databaseManager,
-            settings, messages, logger);
+            messages, logger);
         logger.debug("PreLoginHandler created successfully");
         
         PostLoginHandler postLoginHandler = new PostLoginHandler(
@@ -348,7 +348,7 @@ public class VeloAuth {
         
         // Create AuthListener with initialized handlers
         authListener = new AuthListener(
-            this, connectionManager, authCache, settings,
+            this, authCache, settings,
             preLoginHandler, postLoginHandler, databaseManager, messages);
         
         server.getEventManager().register(this, authListener);
@@ -612,6 +612,6 @@ public class VeloAuth {
      * @return Wersja pluginu
      */
     public String getVersion() {
-        return "1.0.0";
+        return "1.0.1";
     }
 }

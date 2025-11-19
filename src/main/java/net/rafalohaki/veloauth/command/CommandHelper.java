@@ -13,6 +13,9 @@ import java.util.concurrent.CompletableFuture;
  */
 public final class CommandHelper {
 
+    private static final String MSG_SERVER_SHUTTING_DOWN = "Serwer się wyłącza. Spróbuj ponownie później.";
+    private static final String MSG_SERVER_OVERLOADED = "Serwer jest przeciążony. Spróbuj ponownie za chwilę.";
+
     private CommandHelper() {
         // Utility class - prevent instantiation
     }
@@ -112,8 +115,7 @@ public final class CommandHelper {
         try {
             // Check if executor is shutting down
             if (VirtualThreadExecutorProvider.isShutdown()) {
-                source.sendMessage(ValidationUtils.createErrorComponent(
-                        "Serwer się wyłącza. Spróbuj ponownie później."));
+                source.sendMessage(ValidationUtils.createErrorComponent(MSG_SERVER_SHUTTING_DOWN));
                 return;
             }
 
@@ -121,16 +123,14 @@ public final class CommandHelper {
             CompletableFuture.runAsync(task, VirtualThreadExecutorProvider.getVirtualExecutor())
                     .exceptionally(throwable -> {
                         if (throwable instanceof java.util.concurrent.RejectedExecutionException) {
-                            source.sendMessage(ValidationUtils.createErrorComponent(
-                                    "Serwer jest przeciążony. Spróbuj ponownie za chwilę."));
+                            source.sendMessage(ValidationUtils.createErrorComponent(MSG_SERVER_OVERLOADED));
                         } else {
                             source.sendMessage(ValidationUtils.createErrorComponent(messages.get(errorKey)));
                         }
                         return null;
                     });
         } catch (java.util.concurrent.RejectedExecutionException e) {
-            source.sendMessage(ValidationUtils.createErrorComponent(
-                    "Serwer się wyłącza. Spróbuj ponownie później."));
+            source.sendMessage(ValidationUtils.createErrorComponent(MSG_SERVER_SHUTTING_DOWN));
         }
     }
 
@@ -148,8 +148,7 @@ public final class CommandHelper {
         try {
             // Check if executor is shutting down
             if (VirtualThreadExecutorProvider.isShutdown()) {
-                source.sendMessage(ValidationUtils.createErrorComponent(
-                        "Serwer się wyłącza. Spróbuj ponownie później."));
+                source.sendMessage(ValidationUtils.createErrorComponent(MSG_SERVER_SHUTTING_DOWN));
                 return;
             }
 
@@ -160,16 +159,14 @@ public final class CommandHelper {
                         if (throwable instanceof java.util.concurrent.TimeoutException) {
                             source.sendMessage(ValidationUtils.createErrorComponent(messages.get(timeoutKey)));
                         } else if (throwable instanceof java.util.concurrent.RejectedExecutionException) {
-                            source.sendMessage(ValidationUtils.createErrorComponent(
-                                    "Serwer jest przeciążony. Spróbuj ponownie za chwilę."));
+                            source.sendMessage(ValidationUtils.createErrorComponent(MSG_SERVER_OVERLOADED));
                         } else {
                             source.sendMessage(ValidationUtils.createErrorComponent(messages.get(errorKey)));
                         }
                         return null;
                     });
         } catch (java.util.concurrent.RejectedExecutionException e) {
-            source.sendMessage(ValidationUtils.createErrorComponent(
-                    "Serwer się wyłącza. Spróbuj ponownie później."));
+            source.sendMessage(ValidationUtils.createErrorComponent(MSG_SERVER_SHUTTING_DOWN));
         }
     }
 }

@@ -4,13 +4,19 @@ import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ResourceBundle;
 
-import static org.junit.jupiter.api.Assertions.*;
+import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
  * Tests for LanguageFileManager - external language file management.
@@ -71,43 +77,18 @@ class LanguageFileManagerTest {
         assertEquals(originalContent, newContent, "Existing files should not be overwritten");
     }
 
-    @Test
-    void testLoadLanguageBundle_LoadsEnglish() throws IOException {
+    @ParameterizedTest
+    @ValueSource(strings = {"en", "pl", "de"})
+    void testLoadLanguageBundle_LoadsLanguageOrFallsBack(String language) throws IOException {
         // Given
         languageFileManager.initializeLanguageFiles();
 
         // When
-        ResourceBundle bundle = languageFileManager.loadLanguageBundle("en");
+        ResourceBundle bundle = languageFileManager.loadLanguageBundle(language);
 
         // Then
-        assertNotNull(bundle, "Bundle should not be null");
-        assertTrue(bundle.keySet().size() > 0, "Bundle should contain keys");
-    }
-
-    @Test
-    void testLoadLanguageBundle_LoadsPolish() throws IOException {
-        // Given
-        languageFileManager.initializeLanguageFiles();
-
-        // When
-        ResourceBundle bundle = languageFileManager.loadLanguageBundle("pl");
-
-        // Then
-        assertNotNull(bundle, "Bundle should not be null");
-        assertTrue(bundle.keySet().size() > 0, "Bundle should contain keys");
-    }
-
-    @Test
-    void testLoadLanguageBundle_FallsBackToEnglish() throws IOException {
-        // Given
-        languageFileManager.initializeLanguageFiles();
-
-        // When - request non-existent language
-        ResourceBundle bundle = languageFileManager.loadLanguageBundle("de");
-
-        // Then - should fall back to English
-        assertNotNull(bundle, "Bundle should not be null");
-        assertTrue(bundle.keySet().size() > 0, "Bundle should contain keys");
+        assertNotNull(bundle, "Bundle should not be null for language: " + language);
+        assertTrue(bundle.keySet().size() > 0, "Bundle should contain keys for language: " + language);
     }
 
     @Test

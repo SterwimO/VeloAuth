@@ -1,6 +1,5 @@
 package net.rafalohaki.veloauth.integration;
 
-import com.velocitypowered.api.event.connection.PreLoginEvent;
 import com.velocitypowered.api.proxy.Player;
 import net.rafalohaki.veloauth.cache.AuthCache;
 import net.rafalohaki.veloauth.config.Settings;
@@ -47,15 +46,11 @@ class AuthenticationFlowIntegrationTest {
     private TestDatabaseManager databaseManager;
     private Messages messages;
     
-    @Mock
     private PremiumResolverService premiumResolverService;
-    @Mock
     private Settings settings;
     @Mock
     private org.slf4j.Logger logger;
-    @Mock
     private net.rafalohaki.veloauth.VeloAuth plugin;
-    @Mock
     private net.rafalohaki.veloauth.connection.ConnectionManager connectionManager;
     @Mock
     private com.velocitypowered.api.proxy.ProxyServer proxyServer;
@@ -65,9 +60,19 @@ class AuthenticationFlowIntegrationTest {
         messages = new Messages();
         messages.setLanguage("en");
         
-        // Mock settings for premium cache TTL
-        when(settings.getPremiumTtlHours()).thenReturn(24);
-        when(settings.getPremiumRefreshThreshold()).thenReturn(0.8);
+        java.nio.file.Path tempDir;
+        try {
+            tempDir = java.nio.file.Files.createTempDirectory("veloauth-it-config");
+        } catch (java.io.IOException e) {
+            tempDir = java.nio.file.Paths.get("target", "veloauth-it-config");
+            try { 
+                java.nio.file.Files.createDirectories(tempDir); 
+            } catch (java.io.IOException ignored) {
+                // Fallback directory creation failed, test will use non-existent path
+            }
+        }
+        settings = new Settings(tempDir);
+        settings.load();
         
         authCache = new AuthCache(
                 60, 10000, 1000, 10000,
@@ -78,26 +83,44 @@ class AuthenticationFlowIntegrationTest {
         net.rafalohaki.veloauth.database.DatabaseConfig testConfig = 
                 net.rafalohaki.veloauth.database.DatabaseConfig.forLocalDatabase("H2", "memtest");
         databaseManager = new TestDatabaseManager(testConfig, messages);
+
+        try {
+            com.j256.ormlite.jdbc.JdbcConnectionSource cs =
+                    new com.j256.ormlite.jdbc.JdbcConnectionSource("jdbc:h2:mem:veloauth_premium");
+            net.rafalohaki.veloauth.database.PremiumUuidDao premiumDao =
+                    new net.rafalohaki.veloauth.database.PremiumUuidDao(cs);
+            premiumResolverService = new PremiumResolverService(logger, settings, premiumDao);
+        } catch (java.sql.SQLException e) {
+            throw new RuntimeException("Failed to initialize PremiumUuidDao", e);
+        }
         
         when(logger.isDebugEnabled()).thenReturn(false);
         when(logger.isInfoEnabled()).thenReturn(false);
+
+        plugin = new net.rafalohaki.veloauth.VeloAuth(proxyServer, logger, tempDir);
         
         preLoginHandler = new PreLoginHandler(
                 authCache,
                 premiumResolverService,
                 databaseManager,
-                settings,
                 messages,
                 logger
         );
         
-        when(plugin.getServer()).thenReturn(proxyServer);
         when(proxyServer.getScheduler()).thenReturn(mock(com.velocitypowered.api.scheduler.Scheduler.class));
         com.velocitypowered.api.scheduler.Scheduler.TaskBuilder taskBuilder = 
                 mock(com.velocitypowered.api.scheduler.Scheduler.TaskBuilder.class);
         when(proxyServer.getScheduler().buildTask(any(), any(Runnable.class))).thenReturn(taskBuilder);
         when(taskBuilder.schedule()).thenReturn(mock(com.velocitypowered.api.scheduler.ScheduledTask.class));
         
+        connectionManager = new net.rafalohaki.veloauth.connection.ConnectionManager(
+                plugin,
+                databaseManager,
+                authCache,
+                settings,
+                messages
+        );
+
         postLoginHandler = new PostLoginHandler(
                 plugin,
                 authCache,
@@ -177,8 +200,8 @@ class AuthenticationFlowIntegrationTest {
         when(player.isOnlineMode()).thenReturn(false);
         
         // Test post-login handling (unauthorized player)
-        boolean handled = postLoginHandler.handleOfflinePlayer(player, playerIp);
-        assertTrue(handled, "Offline player handling should succeed");
+        assertDoesNotThrow(() -> postLoginHandler.handleOfflinePlayer(player, playerIp),
+                "Offline player handling should not throw exceptions");
         
         // Verify player is not authorized yet
         assertFalse(authCache.isPlayerAuthorized(offlineUuid, playerIp),
@@ -240,13 +263,8 @@ class AuthenticationFlowIntegrationTest {
         assertTrue(hasConflict, 
                 "Should detect conflict when premium player uses offline nickname");
         
-        // Mock PreLoginEvent
-        PreLoginEvent event = mock(PreLoginEvent.class);
-        when(event.getUsername()).thenReturn(conflictedNickname);
-        
-        // Handle conflict
-        assertDoesNotThrow(() -> 
-                preLoginHandler.handleNicknameConflict(event, existingOfflinePlayer, isPremium),
+        assertDoesNotThrow(() ->
+                preLoginHandler.handleNicknameConflictNoEvent(conflictedNickname, existingOfflinePlayer, isPremium),
                 "Conflict handling should not throw exceptions");
     }
 
@@ -276,13 +294,8 @@ class AuthenticationFlowIntegrationTest {
         assertTrue(hasConflict,
                 "Should detect conflict when offline player accesses conflicted account");
         
-        // Mock PreLoginEvent
-        PreLoginEvent event = mock(PreLoginEvent.class);
-        when(event.getUsername()).thenReturn(conflictedNickname);
-        
-        // Handle conflict
         assertDoesNotThrow(() ->
-                preLoginHandler.handleNicknameConflict(event, conflictedPlayer, isPremium),
+                preLoginHandler.handleNicknameConflictNoEvent(conflictedNickname, conflictedPlayer, isPremium),
                 "Conflict handling should not throw exceptions");
     }
 
@@ -304,12 +317,9 @@ class AuthenticationFlowIntegrationTest {
         when(player.getRemoteAddress()).thenReturn(
                 InetSocketAddress.createUnresolved(playerIp, 25565));
         
-        // Mock connection manager
-        when(connectionManager.transferToPicoLimbo(any(Player.class))).thenReturn(true);
-        
         // Test: Unauthorized player should be transferred
-        boolean handled = postLoginHandler.handleOfflinePlayer(player, playerIp);
-        assertTrue(handled, "Unauthorized player handling should succeed");
+        assertDoesNotThrow(() -> postLoginHandler.handleOfflinePlayer(player, playerIp),
+                "Unauthorized player handling should not throw exceptions");
         
         // Verify player is not authorized
         assertFalse(authCache.isPlayerAuthorized(playerUuid, playerIp),
@@ -339,8 +349,8 @@ class AuthenticationFlowIntegrationTest {
         when(player.isOnlineMode()).thenReturn(false);
         
         // Test: Authorized player should stay on backend
-        boolean handled = postLoginHandler.handleOfflinePlayer(player, playerIp);
-        assertTrue(handled, "Authorized player handling should succeed");
+        assertDoesNotThrow(() -> postLoginHandler.handleOfflinePlayer(player, playerIp),
+                "Authorized player handling should not throw exceptions");
         
         // Verify player remains authorized
         assertTrue(authCache.isPlayerAuthorized(playerUuid, playerIp),

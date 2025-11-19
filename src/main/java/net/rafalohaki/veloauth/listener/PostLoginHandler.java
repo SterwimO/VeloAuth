@@ -86,13 +86,12 @@ public class PostLoginHandler {
      *
      * @param player   The offline player
      * @param playerIp Player's IP address
-     * @return true if handled successfully, false if error occurred
      */
-    public boolean handleOfflinePlayer(Player player, String playerIp) {
+    public void handleOfflinePlayer(Player player, String playerIp) {
         if (authCache.isPlayerAuthorized(player.getUniqueId(), playerIp)) {
             logger.info("\u2705 Gracz {} jest już autoryzowany - pozostaje na backendzie",
                     player.getUsername());
-            return true;
+            return;
         }
 
         if (logger.isInfoEnabled()) {
@@ -100,7 +99,6 @@ public class PostLoginHandler {
         }
 
         transferToPicoLimboAsync(player);
-        return true;
     }
 
     /**

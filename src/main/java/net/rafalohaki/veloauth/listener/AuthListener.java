@@ -14,7 +14,6 @@ import net.kyori.adventure.text.format.NamedTextColor;
 import net.rafalohaki.veloauth.VeloAuth;
 import net.rafalohaki.veloauth.cache.AuthCache;
 import net.rafalohaki.veloauth.config.Settings;
-import net.rafalohaki.veloauth.connection.ConnectionManager;
 import net.rafalohaki.veloauth.database.DatabaseManager;
 import net.rafalohaki.veloauth.database.DatabaseManager.DbResult;
 import net.rafalohaki.veloauth.model.RegisteredPlayer;
@@ -75,7 +74,6 @@ public class AuthListener {
      * Tworzy nowy AuthListener.
      *
      * @param plugin            VeloAuth plugin instance
-     * @param connectionManager Manager połączeń
      * @param authCache         Cache autoryzacji
      * @param settings          Ustawienia pluginu
      * @param preLoginHandler   Handler for pre-login logic
@@ -85,7 +83,6 @@ public class AuthListener {
      */
     @Inject
     public AuthListener(VeloAuth plugin,
-            ConnectionManager connectionManager,
             AuthCache authCache,
             Settings settings,
             PreLoginHandler preLoginHandler,

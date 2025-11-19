@@ -28,12 +28,14 @@ public class Settings {
     private final PostgreSQLSettings postgreSQLSettings = new PostgreSQLSettings();
     // Premium settings
     private final PremiumSettings premiumSettings = new PremiumSettings();
+    private static final String DEFAULT_DATABASE_NAME = "veloauth";
+    
     // Database settings
     private String databaseStorageType = DatabaseType.H2.getName();
     private String databaseHostname = "localhost";
     private int databasePort = 3306;
-    private String databaseName = "veloauth";
-    private String databaseUser = "veloauth";
+    private String databaseName = DEFAULT_DATABASE_NAME;
+    private String databaseUser = DEFAULT_DATABASE_NAME;
     @SuppressWarnings("java:S2068") // Not a hardcoded password - configuration placeholder loaded from config.yml
     private String databasePassword = ""; // NOSONAR - Config placeholder, loaded from config.yml
     private String databaseConnectionUrl = null; // Optional full connection URL
@@ -726,11 +728,11 @@ public class Settings {
     }
 
     public String getDatabaseName() {
-        return databaseName != null ? databaseName : "veloauth";
+        return databaseName != null ? databaseName : DEFAULT_DATABASE_NAME;
     }
 
     public String getDatabaseUser() {
-        return databaseUser != null ? databaseUser : "veloauth";
+        return databaseUser != null ? databaseUser : DEFAULT_DATABASE_NAME;
     }
 
     public String getDatabasePassword() {

@@ -3,7 +3,6 @@ package net.rafalohaki.veloauth.listener;
 import com.velocitypowered.api.event.connection.PreLoginEvent;
 import net.rafalohaki.veloauth.cache.AuthCache;
 import net.rafalohaki.veloauth.cache.AuthCache.PremiumCacheEntry;
-import net.rafalohaki.veloauth.config.Settings;
 import net.rafalohaki.veloauth.database.DatabaseManager;
 import net.rafalohaki.veloauth.i18n.Messages;
 import net.rafalohaki.veloauth.model.RegisteredPlayer;
@@ -34,20 +33,17 @@ public class PreLoginHandler {
      * @param authCache              Cache for authorization and premium status
      * @param premiumResolverService Service for resolving premium status
      * @param databaseManager        Manager for database operations
-     * @param settings               Plugin settings (currently unused, reserved for future)
      * @param messages               i18n message system
      * @param logger                 Logger instance
      */
     public PreLoginHandler(AuthCache authCache,
                           PremiumResolverService premiumResolverService,
                           DatabaseManager databaseManager,
-                          Settings settings,
                           Messages messages,
                           Logger logger) {
         this.authCache = authCache;
         this.premiumResolverService = premiumResolverService;
         this.databaseManager = databaseManager;
-        // settings parameter kept for API compatibility, may be used in future
         this.messages = messages;
         this.logger = logger;
     }
@@ -187,6 +183,20 @@ public class PreLoginHandler {
             // Offline player accessing conflicted account
             event.setResult(PreLoginEvent.PreLoginComponentResult.forceOfflineMode());
 
+            logger.debug("[NICKNAME CONFLICT] Offline player {} accessing conflicted account", username);
+        }
+    }
+
+    public void handleNicknameConflictNoEvent(String username, RegisteredPlayer existingPlayer, boolean isPremium) {
+        if (isPremium && existingPlayer.getPremiumUuid() == null) {
+            if (!existingPlayer.getConflictMode()) {
+                existingPlayer.setConflictMode(true);
+                existingPlayer.setConflictTimestamp(System.currentTimeMillis());
+                existingPlayer.setOriginalNickname(existingPlayer.getNickname());
+                databaseManager.savePlayer(existingPlayer).join();
+                logger.info("[NICKNAME CONFLICT] Premium player {} detected conflict with offline account", username);
+            }
+        } else if (!isPremium && existingPlayer.getConflictMode()) {
             logger.debug("[NICKNAME CONFLICT] Offline player {} accessing conflicted account", username);
         }
     }

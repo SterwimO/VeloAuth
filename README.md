@@ -1,18 +1,9 @@
-# VeloAuth v2.0.0
+# VeloAuth v1.0.1
 
 [![Modrinth](https://img.shields.io/badge/Modrinth-00AF5C?style=for-the-badge&logo=modrinth&logoColor=white)](https://modrinth.com/plugin/veloauth)
 [![Discord](https://img.shields.io/badge/Discord-5865F2?style=for-the-badge&logo=discord&logoColor=white)](https://discord.gg/e2RkPbc3ZR)
 
 **Complete Velocity Authentication Plugin** with BCrypt, Virtual Threads and multi-database support.
-
-## What's New in v2.0.0
-
-- ✨ **Graceful Shutdown** - Proper executor termination with timeout handling
-- ✨ **Premium Cache TTL** - Configurable 24-hour cache expiration with background refresh
-- ✨ **Enhanced Initialization** - Improved handler lifecycle and null safety
-- ✨ **Code Cleanup** - Removed deprecated APIs and dead code
-- ✨ **Cache Optimization** - LRU eviction and stale-while-revalidate pattern
-
 ## Description
 
 VeloAuth is an **authorization manager for Velocity proxy** that handles player transfers between Velocity, PicoLimbo and backend servers. The plugin supports all authorization operations on the proxy.
@@ -170,32 +161,17 @@ ConnectionEvent → Cache HIT → Direct Backend
 
 VeloAuth implements intelligent premium status caching to minimize external API calls:
 
-- **TTL-based expiration**: Premium status cached for 24 hours (configurable)
-- **Background refresh**: Stale entries (>80% TTL) trigger async refresh while serving cached value
-- **LRU eviction**: Maximum 10,000 entries with least-recently-used eviction
-- **Stale-while-revalidate**: Zero-latency updates using stale cache during background refresh
-
-### Configuration
+### Premium Cache Configuration
 ```yaml
 cache:
   premium-ttl-hours: 24  # How long to cache premium status
   premium-refresh-threshold: 0.8  # Trigger background refresh at 80% TTL
 ```
-
-## Graceful Shutdown
-
-VeloAuth ensures clean shutdown without rejected tasks:
-
-1. **Shutdown signal received** - New tasks are rejected with user-friendly messages
-2. **Graceful wait** - 10-second timeout for pending tasks to complete
-3. **Forced shutdown** - Tasks still running after timeout are cancelled
-4. **Logging** - Dropped task count logged for diagnostics
-
-This prevents `RejectedExecutionException` errors during server shutdown.
+events `RejectedExecutionException` errors during server shutdown.
 
 ## Compatibility
 
-VeloAuth is **100% compatible** with LimboAuth database - ignores `TOTPTOKEN` and `ISSUEDTIME` fields.
+VeloAuth is **compatible** with LimboAuth database - ignores `TOTPTOKEN` and `ISSUEDTIME` fields.
 
 ### Migration from LimboAuth
 1. Stop LimboAuth
@@ -203,71 +179,9 @@ VeloAuth is **100% compatible** with LimboAuth database - ignores `TOTPTOKEN` an
 3. Configure the same database
 4. Start Velocity - VeloAuth will automatically detect existing accounts
 
-### Upgrading from v1.x to v2.0
-See [MIGRATION.md](MIGRATION.md) for detailed upgrade instructions and breaking changes.
-
-## Development
-
-### Project Structure
-```
-src/main/java/net/rafalohaki/veloauth/
-├── VeloAuth.java              # Main plugin class
-├── cache/AuthCache.java       # Thread-safe authorization cache
-├── command/CommandHandler.java # Command handling
-├── config/Settings.java       # YAML configuration
-├── connection/ConnectionManager.java # Player transfers
-├── database/DatabaseManager.java # ORMLite + connection pooling
-├── listener/AuthListener.java # Velocity event handling
-└── model/                     # Player models (ORMLite)
-```
-
 ## License
 
 MIT License - see [LICENSE](LICENSE) for details.
-
-## Troubleshooting
-
-### RejectedExecutionException during shutdown
-**Fixed in v2.0.0** - The plugin now implements graceful shutdown with proper timeout handling.
-
-### NullPointerException in AuthListener
-**Fixed in v2.0.0** - Handlers are now initialized before event registration with null safety checks.
-
-### Premium status not updating
-Check cache TTL settings:
-```yaml
-cache:
-  premium-ttl-hours: 24  # Reduce if you need faster updates
-  premium-refresh-threshold: 0.8  # Lower for more frequent background refreshes
-```
-
-### Slow login times
-- **Cache hit**: ~20ms (no DB query)
-- **Cache miss**: ~100ms (1 DB query)
-- **Premium check**: ~50-200ms (external API call, cached for 24h)
-
-If experiencing slow logins, check:
-1. Database connection pool size (`connection-pool-size: 20`)
-2. Network latency to database
-3. Premium resolver timeout (`request-timeout-ms: 400`)
-
-### High memory usage
-Adjust cache limits:
-```yaml
-cache:
-  max-size: 10000  # Reduce if needed
-  premium-ttl-hours: 12  # Shorter TTL = less memory
-```
-
-### Database connection issues
-1. Verify database credentials in `config.yml`
-2. Check database server is running and accessible
-3. Verify connection pool settings:
-```yaml
-database:
-  connection-pool-size: 20
-  max-lifetime-millis: 1800000  # 30 minutes
-```
 
 ## Support
 
@@ -276,5 +190,5 @@ database:
 
 ---
 
-**VeloAuth v2.0.0** - Complete Velocity Authentication Plugin  
+**VeloAuth v1.0.1** - Complete Velocity Authentication Plugin  
 Author: rafalohaki | Java 21 + Virtual Threads + BCrypt + Multi-DB

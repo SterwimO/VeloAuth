@@ -43,7 +43,7 @@ public class Messages {
      * @param dataDirectory The plugin's data directory
      * @param language The language code (e.g., "en", "pl")
      */
-    public Messages(Path dataDirectory, String language) {
+    public Messages(Path dataDirectory, String language) throws IOException {
         this.languageFileManager = new LanguageFileManager(dataDirectory);
         this.currentLanguage = language != null ? language.toLowerCase(Locale.ROOT) : "en";
         this.useExternalFiles = true;
@@ -52,8 +52,7 @@ public class Messages {
             languageFileManager.initializeLanguageFiles();
             reload();
         } catch (IOException e) {
-            logger.error("Failed to initialize language files", e);
-            throw new RuntimeException("Language initialization failed", e);
+            throw new IOException("Language initialization failed: " + e.getMessage(), e);
         }
     }
     
@@ -195,21 +194,23 @@ public class Messages {
     private String getFromBundle(String key, Object... args) {
         try {
             String message = bundle.getString(key);
-            
-            // Format message with arguments if provided
-            if (args.length > 0) {
-                try {
-                    return MessageFormat.format(message, args);
-                } catch (IllegalArgumentException e) {
-                    logger.warn("Failed to format message '{}': {}", key, e.getMessage());
-                    return message;
-                }
-            }
-            
-            return message;
+            return formatMessageSafely(message, key, args);
         } catch (MissingResourceException e) {
             logger.warn("Missing translation key: {}", key);
             return "Missing: " + key;
+        }
+    }
+    
+    private String formatMessageSafely(String message, String key, Object... args) {
+        if (args.length == 0) {
+            return message;
+        }
+        
+        try {
+            return MessageFormat.format(message, args);
+        } catch (IllegalArgumentException e) {
+            logger.warn("Failed to format message '{}': {}", key, e.getMessage());
+            return message;
         }
     }
 

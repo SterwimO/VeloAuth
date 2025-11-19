@@ -8,7 +8,10 @@ import org.junit.jupiter.api.io.TempDir;
 import java.io.IOException;
 import java.nio.file.Path;
 
-import static org.junit.jupiter.api.Assertions.*;
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
  * Tests for Messages class with external language files.
@@ -21,7 +24,7 @@ class MessagesExternalFilesTest {
     private Messages messages;
 
     @BeforeEach
-    void setUp() {
+    void setUp() throws IOException {
         // Messages will initialize language files automatically
         messages = new Messages(tempDir, "en");
     }
@@ -43,7 +46,7 @@ class MessagesExternalFilesTest {
     }
 
     @Test
-    void testExternalFiles_LoadsPolish() {
+    void testExternalFiles_LoadsPolish() throws IOException {
         // Given
         messages = new Messages(tempDir, "pl");
 
