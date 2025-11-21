@@ -39,7 +39,7 @@ import java.util.concurrent.atomic.AtomicBoolean;
  */
 public final class VirtualThreadExecutorProvider {
 
-    private static final Logger logger = LoggerFactory.getLogger(VirtualThreadExecutorProvider.class);
+    private static final Logger LOGGER = LoggerFactory.getLogger(VirtualThreadExecutorProvider.class);
 
     /**
      * Shared Virtual Thread executor for async operations.
@@ -107,32 +107,32 @@ public final class VirtualThreadExecutorProvider {
      */
     public static void shutdown() {
         if (!SHUTDOWN_INITIATED.compareAndSet(false, true)) {
-            logger.warn("Shutdown already initiated");
+            LOGGER.warn("Shutdown already initiated");
             return;
         }
 
         try {
-            logger.info("Initiating graceful shutdown of Virtual Thread executor...");
+            LOGGER.info("Initiating graceful shutdown of Virtual Thread executor...");
             VIRTUAL_EXECUTOR.shutdown();
 
             if (!VIRTUAL_EXECUTOR.awaitTermination(10, java.util.concurrent.TimeUnit.SECONDS)) {
-                logger.warn("Executor did not terminate within 10 seconds, forcing shutdown...");
+                LOGGER.warn("Executor did not terminate within 10 seconds, forcing shutdown...");
                 java.util.List<Runnable> droppedTasks = VIRTUAL_EXECUTOR.shutdownNow();
-                logger.warn("Forced shutdown - {} tasks were dropped", droppedTasks.size());
+                LOGGER.warn("Forced shutdown - {} tasks were dropped", droppedTasks.size());
 
                 // Final termination check after forced shutdown
                 if (!VIRTUAL_EXECUTOR.awaitTermination(5, java.util.concurrent.TimeUnit.SECONDS)) {
-                    logger.error("Executor did not terminate after forced shutdown");
+                    LOGGER.error("Executor did not terminate after forced shutdown");
                 }
             } else {
-                logger.info("Virtual Thread executor shutdown completed successfully");
+                LOGGER.info("Virtual Thread executor shutdown completed successfully");
             }
         } catch (InterruptedException e) {
-            logger.error("Shutdown interrupted", e);
+            LOGGER.error("Shutdown interrupted", e);
             VIRTUAL_EXECUTOR.shutdownNow();
             Thread.currentThread().interrupt();
         } catch (Exception e) {
-            logger.error("Error during Virtual Thread executor shutdown", e);
+            LOGGER.error("Error during Virtual Thread executor shutdown", e);
         }
     }
 }

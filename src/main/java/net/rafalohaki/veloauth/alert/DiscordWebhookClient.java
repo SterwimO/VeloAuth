@@ -20,7 +20,7 @@ import java.util.Objects;
  */
 public class DiscordWebhookClient {
 
-    private static final Logger logger = LoggerFactory.getLogger(DiscordWebhookClient.class);
+    private static final Logger LOGGER = LoggerFactory.getLogger(DiscordWebhookClient.class);
     private static final ObjectMapper JSON_MAPPER = new ObjectMapper();
     private static final int MAX_CONTENT_LENGTH = 2000; // Discord limit
     private static final Duration REQUEST_TIMEOUT = Duration.ofSeconds(5);
@@ -46,8 +46,8 @@ public class DiscordWebhookClient {
                 .connectTimeout(REQUEST_TIMEOUT)
                 .build();
         
-        if (logger.isDebugEnabled()) {
-            logger.debug("Discord webhook client initialized (webhook: {})", maskWebhookUrl());
+        if (LOGGER.isDebugEnabled()) {
+            LOGGER.debug("Discord webhook client initialized (webhook: {})", maskWebhookUrl());
         }
     }
     
@@ -85,7 +85,7 @@ public class DiscordWebhookClient {
      */
     public boolean sendMessage(String content) {
         if (content == null || content.isBlank()) {
-            logger.warn("Discord webhook: empty content, skipping");
+            LOGGER.warn("Discord webhook: empty content, skipping");
             return false;
         }
 
@@ -129,41 +129,60 @@ public class DiscordWebhookClient {
                     .build();
 
             HttpResponse<String> response = httpClient.send(request, HttpResponse.BodyHandlers.ofString());
-
-            if (response.statusCode() == 204 || response.statusCode() == 200) {
-                if (logger.isDebugEnabled()) {
-                    logger.debug("Discord webhook sent successfully (webhook: {})", maskWebhookUrl());
-                }
-                return true;
-            }
-            
-            // SECURITY: Handle rate limiting (Discord limit: 30 requests/minute)
-            if (response.statusCode() == 429) {
-                String retryAfter = response.headers().firstValue("Retry-After").orElse("unknown");
-                logger.warn("Discord webhook rate limited, retry after: {} seconds (webhook: {})", 
-                        retryAfter, maskWebhookUrl());
-                return false;
-            }
-
-            // SECURITY: Don't log response body (may contain sensitive data)
-            logger.warn("Discord webhook failed: HTTP {} (webhook: {})", 
-                    response.statusCode(), maskWebhookUrl());
-            return false;
+            return handleHttpResponse(response);
 
         } catch (IOException e) {
-            logger.warn("Discord webhook IO error: {} (webhook: {})", 
-                    e.getMessage(), maskWebhookUrl());
+            if (LOGGER.isWarnEnabled()) {
+                LOGGER.warn("Discord webhook IO error: {} (webhook: {})", 
+                        e.getMessage(), maskWebhookUrl());
+            }
             return false;
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
-            logger.warn("Discord webhook interrupted: {} (webhook: {})", 
-                    e.getMessage(), maskWebhookUrl());
+            if (LOGGER.isWarnEnabled()) {
+                LOGGER.warn("Discord webhook interrupted: {} (webhook: {})", 
+                        e.getMessage(), maskWebhookUrl());
+            }
             return false;
         } catch (Exception e) {
             // SECURITY: Don't log exception with webhook URL in message
-            logger.error("Discord webhook unexpected error (webhook: {})", maskWebhookUrl(), e);
+            if (LOGGER.isErrorEnabled()) {
+                LOGGER.error("Discord webhook unexpected error (webhook: {})", maskWebhookUrl(), e);
+            }
             return false;
         }
+    }
+
+    /**
+     * Handles HTTP response from Discord webhook.
+     *
+     * @param response HTTP response from Discord
+     * @return true if request was successful, false otherwise
+     */
+    private boolean handleHttpResponse(HttpResponse<String> response) {
+        if (response.statusCode() == 204 || response.statusCode() == 200) {
+            if (LOGGER.isDebugEnabled()) {
+                LOGGER.debug("Discord webhook sent successfully (webhook: {})", maskWebhookUrl());
+            }
+            return true;
+        }
+        
+        // SECURITY: Handle rate limiting (Discord limit: 30 requests/minute)
+        if (response.statusCode() == 429) {
+            String retryAfter = response.headers().firstValue("Retry-After").orElse("unknown");
+            if (LOGGER.isWarnEnabled()) {
+                LOGGER.warn("Discord webhook rate limited, retry after: {} seconds (webhook: {})", 
+                        retryAfter, maskWebhookUrl());
+            }
+            return false;
+        }
+
+        // SECURITY: Don't log response body (may contain sensitive data)
+        if (LOGGER.isWarnEnabled()) {
+            LOGGER.warn("Discord webhook failed: HTTP {} (webhook: {})", 
+                    response.statusCode(), maskWebhookUrl());
+        }
+        return false;
     }
 
     /**

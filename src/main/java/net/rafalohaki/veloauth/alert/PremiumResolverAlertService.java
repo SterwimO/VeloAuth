@@ -134,7 +134,7 @@ public class PremiumResolverAlertService implements AutoCloseable {
      */
     private void sendFailureAlert(int total, int failed, double failureRate) {
         if (discordClient == null) {
-            logger.warn("⚠️ Premium resolver failure rate: {}/{} ({:.1f}%) - Discord disabled",
+            logger.warn("⚠️ Premium resolver failure rate: {}/{} ({:.1f}%)",
                     failed, total, failureRate * 100);
             return;
         }
@@ -175,7 +175,7 @@ public class PremiumResolverAlertService implements AutoCloseable {
 
             boolean sent = discordClient.sendEmbed(embed);
             if (sent) {
-                logger.warn("⚠️ Premium resolver alert sent to Discord: {}/{} ({:.1f}% failure rate)",
+                logger.warn("⚠️ Premium resolver alert sent to Discord: {}/{} ({:.1f}%)",
                         failed, total, failureRate * 100);
             } else {
                 logger.error("Failed to send Discord alert (check webhook URL)");
@@ -197,9 +197,9 @@ public class PremiumResolverAlertService implements AutoCloseable {
         }
 
         StringBuilder sb = new StringBuilder();
-        failuresByResolver.forEach((resolver, count) -> {
-            sb.append("**").append(resolver).append("**: ").append(count.get()).append(" failures\n");
-        });
+        failuresByResolver.forEach((resolver, count) ->
+            sb.append("**").append(resolver).append("**: ").append(count.get()).append(" failures\n")
+        );
         return sb.toString().trim();
     }
 
@@ -214,7 +214,7 @@ public class PremiumResolverAlertService implements AutoCloseable {
 
         if (previousTotal > 0) {
             double failureRate = (double) previousFailed / previousTotal;
-            logger.debug("Metrics reset: {}/{} requests failed ({:.1f}%) in last window",
+            logger.debug("Metrics reset: {}/{} requests failed ({:.1f}%)",
                     previousFailed, previousTotal, failureRate * 100);
         }
     }
