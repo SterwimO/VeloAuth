@@ -123,6 +123,14 @@
             <version>2.20.1</version>
         </dependency>
 
+        <!-- bStats -->
+        <dependency>
+            <groupId>org.bstats</groupId>
+            <artifactId>bstats-velocity</artifactId>
+            <version>3.0.2</version>
+            <scope>compile</scope>
+        </dependency>
+
         <!-- Testing -->
         <dependency>
             <groupId>org.junit.jupiter</groupId>
@@ -226,6 +234,10 @@
                         <configuration>
                             <createDependencyReducedPom>false</createDependencyReducedPom>
                             <relocations>
+                                <relocation>
+                                    <pattern>org.bstats</pattern>
+                                    <shadedPattern>net.rafalohaki.veloauth.libs.bstats</shadedPattern>
+                                </relocation>
                                 <relocation>
                                     <pattern>com.j256.ormlite</pattern>
                                     <shadedPattern>net.rafalohaki.veloauth.libs.ormlite</shadedPattern>

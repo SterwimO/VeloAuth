@@ -13,6 +13,7 @@ import net.rafalohaki.veloauth.database.DatabaseManager;
 import net.rafalohaki.veloauth.database.DatabaseManager.DbResult;
 import net.rafalohaki.veloauth.i18n.Messages;
 import net.rafalohaki.veloauth.model.RegisteredPlayer;
+import org.bstats.velocity.Metrics;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -72,7 +73,8 @@ class VeloAuthIntegrationTest {
 
         // Use real plugin instance to avoid Mockito inline mocking of plugin class
         when(logger.isDebugEnabled()).thenReturn(false);
-        plugin = new VeloAuth(proxyServer, logger, java.nio.file.Path.of("."));
+        Metrics.Factory metricsFactory = mock(Metrics.Factory.class);
+        plugin = new VeloAuth(proxyServer, logger, java.nio.file.Path.of("."), metricsFactory);
 
         messages = new Messages();
         messages.setLanguage("en");

@@ -10,6 +10,7 @@ import net.rafalohaki.veloauth.listener.PreLoginHandler;
 import net.rafalohaki.veloauth.model.CachedAuthUser;
 import net.rafalohaki.veloauth.model.RegisteredPlayer;
 import net.rafalohaki.veloauth.premium.PremiumResolverService;
+import org.bstats.velocity.Metrics;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -97,7 +98,8 @@ class AuthenticationFlowIntegrationTest {
         when(logger.isDebugEnabled()).thenReturn(false);
         when(logger.isInfoEnabled()).thenReturn(false);
 
-        plugin = new net.rafalohaki.veloauth.VeloAuth(proxyServer, logger, tempDir);
+        Metrics.Factory metricsFactory = mock(Metrics.Factory.class);
+        plugin = new net.rafalohaki.veloauth.VeloAuth(proxyServer, logger, tempDir, metricsFactory);
         
         preLoginHandler = new PreLoginHandler(
                 authCache,

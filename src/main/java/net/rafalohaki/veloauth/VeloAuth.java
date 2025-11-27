@@ -23,6 +23,7 @@ import net.rafalohaki.veloauth.listener.PreLoginHandler;
 import net.rafalohaki.veloauth.listener.PostLoginHandler;
 import net.rafalohaki.veloauth.premium.PremiumResolverService;
 import net.rafalohaki.veloauth.util.VirtualThreadExecutorProvider;
+import org.bstats.velocity.Metrics;
 import org.slf4j.Logger;
 
 import java.nio.file.Path;
@@ -54,9 +55,12 @@ import java.util.concurrent.CompletableFuture;
 )
 public class VeloAuth {
 
+    private static final int BSTATS_PLUGIN_ID = 28142;
+
     private final ProxyServer server;
     private final Logger logger;
     private final Path dataDirectory;
+    private final Metrics.Factory metricsFactory;
 
     // Główne komponenty pluginu
     private Settings settings;
@@ -84,10 +88,11 @@ public class VeloAuth {
      * @param dataDirectory Path do data folder
      */
     @Inject
-    public VeloAuth(ProxyServer server, Logger logger, @DataDirectory Path dataDirectory) {
+    public VeloAuth(ProxyServer server, Logger logger, @DataDirectory Path dataDirectory, Metrics.Factory metricsFactory) {
         this.server = server;
         this.logger = logger;
         this.dataDirectory = dataDirectory;
+        this.metricsFactory = metricsFactory;
         
                 
         if (logger.isDebugEnabled()) {
@@ -160,6 +165,10 @@ public class VeloAuth {
                             authCache.clearAll();
                             logger.debug("Cleared stale authentication cache entries");
                         }
+
+                        // Initialize bStats metrics
+                        metricsFactory.make(this, BSTATS_PLUGIN_ID);
+                        logger.info("📊 bStats metrics initialized (Plugin ID: {})", BSTATS_PLUGIN_ID);
 
                         // CRITICAL: Set initialized flag to TRUE only after ALL components are ready
                         initialized = true;
