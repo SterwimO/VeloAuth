@@ -2,16 +2,67 @@ package net.rafalohaki.veloauth.i18n;
 
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.format.NamedTextColor;
+import net.kyori.adventure.text.serializer.legacy.LegacyComponentSerializer;
 
+/**
+ * Wrapper for Messages that provides formatted Adventure Components.
+ * Supports color codes in messages:
+ * - Legacy codes: §c (red), §a (green), §6 (gold), etc.
+ * - Ampersand codes: &c (red), &a (green), &6 (gold), etc.
+ */
 public final class SimpleMessages {
     private final Messages messages;
+    
+    // Serializer that supports both § and & color codes
+    private static final LegacyComponentSerializer SERIALIZER = LegacyComponentSerializer.builder()
+            .character('§')
+            .hexColors()
+            .build();
+    
+    private static final LegacyComponentSerializer AMPERSAND_SERIALIZER = LegacyComponentSerializer.builder()
+            .character('&')
+            .hexColors()
+            .build();
 
     public SimpleMessages(Messages messages) {
         this.messages = messages;
     }
 
-    public Component key(String key, NamedTextColor color, Object... args) {
-        return Component.text(messages.get(key, args), color);
+    /**
+     * Gets a message as Component with color support.
+     * If the message contains color codes (§ or &), they will be parsed.
+     * Otherwise, the fallback color is applied.
+     * 
+     * @param key The message key
+     * @param fallbackColor Color to use if message has no color codes
+     * @param args Format arguments
+     * @return Formatted Component
+     */
+    public Component key(String key, NamedTextColor fallbackColor, Object... args) {
+        String text = messages.get(key, args);
+        return parseWithColors(text, fallbackColor);
+    }
+    
+    /**
+     * Parses text with color codes. If no color codes found, uses fallback color.
+     */
+    private Component parseWithColors(String text, NamedTextColor fallbackColor) {
+        if (text == null || text.isEmpty()) {
+            return Component.empty();
+        }
+        
+        // Check if text contains color codes
+        boolean hasLegacyCodes = text.contains("§");
+        boolean hasAmpersandCodes = text.contains("&");
+        
+        if (hasLegacyCodes) {
+            return SERIALIZER.deserialize(text);
+        } else if (hasAmpersandCodes) {
+            return AMPERSAND_SERIALIZER.deserialize(text);
+        } else {
+            // No color codes, use fallback color
+            return Component.text(text, fallbackColor);
+        }
     }
 
     public Component loginSuccess() {
