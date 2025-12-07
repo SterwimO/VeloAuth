@@ -24,6 +24,11 @@ public final class LanguageFileManager {
     private static final String MESSAGES_PREFIX = "messages_";
     private static final String PROPERTIES_SUFFIX = ".properties";
     
+    // Language validation markers - unique strings that identify each language
+    private static final String LANGUAGE_MARKER_KEY = "auth.login.success";
+    private static final String ENGLISH_MARKER_VALUE = "Logged in successfully!";
+    private static final String POLISH_MARKER_VALUE = "Zalogowano pomyślnie!";
+    
     private final Path langDirectory;
     
     /**
@@ -56,7 +61,7 @@ public final class LanguageFileManager {
     
     /**
      * Copies a default language file from the JAR to the external lang directory.
-     * If file exists, merges missing keys from JAR version.
+     * If file exists, validates language content and regenerates if corrupted.
      *
      * @param filename The language file name (e.g., "messages_en.properties")
      * @throws IOException if file copying fails
@@ -65,18 +70,100 @@ public final class LanguageFileManager {
         Path targetFile = langDirectory.resolve(filename);
         
         if (!Files.exists(targetFile)) {
-            try (InputStream is = getClass().getResourceAsStream("/lang/" + filename)) {
-                if (is == null) {
-                    logger.error("Default language file not found in JAR: {}", filename);
-                    return;
-                }
-                Files.copy(is, targetFile);
-                logger.info("Copied default language file: {}", filename);
-            }
+            copyFromJar(filename, targetFile);
         } else {
-            // Merge missing keys from JAR version
-            mergeLanguageFile(filename, targetFile);
+            // Validate language content before merging
+            if (!isLanguageFileValid(filename, targetFile)) {
+                logger.warn("Language file {} has corrupted/mixed content - regenerating from JAR", filename);
+                forceRegenerateLanguageFile(filename, targetFile);
+            } else {
+                // Merge missing keys from JAR version
+                mergeLanguageFile(filename, targetFile);
+            }
         }
+    }
+    
+    /**
+     * Copies a language file from JAR to target path.
+     */
+    private void copyFromJar(String filename, Path targetFile) throws IOException {
+        try (InputStream is = getClass().getResourceAsStream("/lang/" + filename)) {
+            if (is == null) {
+                logger.error("Default language file not found in JAR: {}", filename);
+                return;
+            }
+            Files.copy(is, targetFile);
+            logger.info("Copied default language file: {}", filename);
+        }
+    }
+    
+    /**
+     * Validates that a language file contains content in the correct language.
+     * Checks specific marker keys to detect mixed language content.
+     *
+     * @param filename The language file name
+     * @param targetFile Path to the file to validate
+     * @return true if valid, false if corrupted or mixed
+     */
+    private boolean isLanguageFileValid(String filename, Path targetFile) {
+        try {
+            java.util.Properties props = new java.util.Properties();
+            try (InputStream stream = Files.newInputStream(targetFile);
+                 InputStreamReader reader = new InputStreamReader(stream, StandardCharsets.UTF_8)) {
+                props.load(reader);
+            }
+            
+            // Determine expected language from filename
+            String expectedValue;
+            if (filename.equals(ENGLISH_FILE)) {
+                expectedValue = ENGLISH_MARKER_VALUE;
+            } else if (filename.equals(POLISH_FILE)) {
+                expectedValue = POLISH_MARKER_VALUE;
+            } else {
+                // Custom language files - skip validation
+                return true;
+            }
+            
+            String actualValue = props.getProperty(LANGUAGE_MARKER_KEY);
+            if (actualValue == null) {
+                logger.warn("Language file {} missing marker key: {}", filename, LANGUAGE_MARKER_KEY);
+                return false;
+            }
+            
+            boolean valid = expectedValue.equals(actualValue.trim());
+            if (!valid) {
+                logger.warn("Language file {} has wrong language content. Expected '{}', found '{}'", 
+                        filename, expectedValue, actualValue);
+            }
+            return valid;
+            
+        } catch (IOException e) {
+            logger.error("Failed to validate language file {}: {}", filename, e.getMessage());
+            return false;
+        }
+    }
+    
+    /**
+     * Force regenerates a language file by deleting and recreating from JAR.
+     *
+     * @param filename The language file name
+     * @param targetFile Path to the file to regenerate
+     * @throws IOException if regeneration fails
+     */
+    private void forceRegenerateLanguageFile(String filename, Path targetFile) throws IOException {
+        // Backup the corrupted file
+        Path backupFile = langDirectory.resolve(filename + ".backup." + System.currentTimeMillis());
+        try {
+            Files.move(targetFile, backupFile);
+            logger.info("Backed up corrupted language file to: {}", backupFile.getFileName());
+        } catch (IOException e) {
+            logger.warn("Could not backup corrupted file, deleting: {}", e.getMessage());
+            Files.deleteIfExists(targetFile);
+        }
+        
+        // Copy fresh file from JAR
+        copyFromJar(filename, targetFile);
+        logger.info("Regenerated language file: {}", filename);
     }
     
     /**
@@ -159,6 +246,12 @@ public final class LanguageFileManager {
         
         if (!Files.exists(languageFile)) {
             throw new IOException("English fallback language file not found at: " + languageFile);
+        }
+        
+        // Validate and regenerate if corrupted (for built-in languages only)
+        if (("en".equals(language) || "pl".equals(language)) && !isLanguageFileValid(filename, languageFile)) {
+            logger.warn("Language file validation failed during load, regenerating: {}", filename);
+            forceRegenerateLanguageFile(filename, languageFile);
         }
         
         // For non-English languages, fill missing keys from English
