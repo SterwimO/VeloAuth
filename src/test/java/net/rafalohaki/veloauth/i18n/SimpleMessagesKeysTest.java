@@ -206,7 +206,30 @@ class SimpleMessagesKeysTest {
             "validation.maxsessions.gt_zero",
             "validation.maxpremiumcache.gt_zero",
             "validation.maxloginattempts.gt_zero",
-            "validation.bruteforcetimeout.gt_zero"
+            "validation.bruteforcetimeout.gt_zero",
+            // Error messages (additional)
+            "error.player_only",
+            // Cache debug messages
+            "cache.debug.auth.added",
+            "cache.debug.failed.login",
+            "cache.debug.player.removed",
+            "cache.debug.premium.added",
+            "cache.debug.premium.removed",
+            "cache.debug.reset.attempts",
+            "cache.debug.session.ended",
+            "cache.debug.session.started",
+            "cache.error.args.register_failed",
+            "cache.error.state.clear",
+            "cache.error.state.register_failed",
+            "cache.warn.ip.blocked",
+            // Connection messages (additional)
+            "connection.picolimbo.error",
+            "player.connected.backend",
+            "player.transfer.attempt",
+            "player.transfer.backend.attempt",
+            // Security messages (additional)
+            "security.session.hijack",
+            "security.session.ip.mismatch"
     );
 
     /**
