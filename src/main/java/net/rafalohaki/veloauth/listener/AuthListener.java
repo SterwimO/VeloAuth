@@ -460,12 +460,34 @@ public class AuthListener {
                 player.sendMessage(Component.text(
                         messages.get("auth.header"),
                         NamedTextColor.GOLD));
-                player.sendMessage(Component.text(
-                        messages.get("auth.prompt.login"),
-                        NamedTextColor.YELLOW));
-                player.sendMessage(Component.text(
-                        messages.get("auth.prompt.register"),
-                        NamedTextColor.YELLOW));
+
+                // Check registration status async to send appropriate prompt
+                databaseManager.findPlayerByNickname(player.getUsername())
+                    .thenAccept(dbResult -> {
+                        if (dbResult.isDatabaseError()) {
+                             player.sendMessage(Component.text(
+                                messages.get("auth.prompt.generic"),
+                                NamedTextColor.YELLOW));
+                             return;
+                        }
+                        
+                        RegisteredPlayer registeredPlayer = dbResult.getValue();
+                        if (registeredPlayer != null) {
+                            // Account exists -> Login
+                            player.sendMessage(Component.text(
+                                messages.get("auth.account_exists"),
+                                NamedTextColor.GREEN));
+                        } else {
+                            // No account -> Register
+                            player.sendMessage(Component.text(
+                                messages.get("auth.first_time"),
+                                NamedTextColor.AQUA));
+                        }
+                    })
+                    .exceptionally(e -> {
+                        logger.error("Error sending auth prompt for {}", player.getUsername(), e);
+                        return null;
+                    });
             }
         } catch (Exception e) {
             logger.error("Error in ServerConnected", e);

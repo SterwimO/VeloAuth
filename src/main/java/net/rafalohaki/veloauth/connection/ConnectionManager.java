@@ -273,7 +273,6 @@ public class ConnectionManager {
                 logger.debug(messages.get("player.transfer.attempt"), player.getUsername());
             }
 
-            sendAccountCheckMessage(player);
             return executePicoLimboTransfer(player, targetServer);
 
         } catch (Exception e) {
@@ -297,56 +296,6 @@ public class ConnectionManager {
         }
         
         return picoLimboServer.get();
-    }
-    
-    private void sendAccountCheckMessage(Player player) {
-        CompletableFuture<Void> messageFuture = databaseManager.findPlayerByNickname(player.getUsername())
-                .thenAccept(dbResult -> handleAccountCheckResult(player, dbResult))
-                .exceptionally(throwable -> handleAccountCheckException(player, throwable));
-
-        messageFuture
-                .orTimeout(10, TimeUnit.SECONDS)
-                .whenComplete((result, throwable) -> handleMessageCompletion(player, throwable))
-                .join();
-    }
-    
-    private void handleAccountCheckResult(Player player, DbResult<RegisteredPlayer> dbResult) {
-        if (dbResult.isDatabaseError()) {
-            if (logger.isWarnEnabled()) {
-                logger.warn("Database error while checking account for {}: {}",
-                        player.getUsername(), dbResult.getErrorMessage());
-            }
-            sendGenericAuthMessage(player);
-            return;
-        }
-
-        RegisteredPlayer existingPlayer = dbResult.getValue();
-        if (existingPlayer != null) {
-            sendLoginMessage(player);
-            if (logger.isDebugEnabled()) {
-                logger.debug("Wykryto istniejące konto dla {} - pokazano komunikat logowania", player.getUsername());
-            }
-        } else {
-            sendRegisterMessage(player);
-            if (logger.isDebugEnabled()) {
-                logger.debug("Wykryto nowe konto dla {} - pokazano komunikat rejestracji", player.getUsername());
-            }
-        }
-    }
-    
-    private Void handleAccountCheckException(Player player, Throwable throwable) {
-        if (logger.isWarnEnabled()) {
-            logger.warn("Błąd podczas sprawdzania konta dla {}: {}", player.getUsername(), throwable.getMessage());
-        }
-        sendGenericAuthMessage(player);
-        return null;
-    }
-    
-    private void handleMessageCompletion(Player player, Throwable throwable) {
-        if (throwable != null && logger.isErrorEnabled()) {
-            logger.error("Krytyczny błąd w operacji wiadomości dla {}: {}",
-                    player.getUsername(), throwable.getMessage(), throwable);
-        }
     }
     
     private boolean handleTransferError(Player player, Exception e) {

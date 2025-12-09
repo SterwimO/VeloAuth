@@ -197,14 +197,6 @@ public final class SimpleMessages {
         return key("auth.header", NamedTextColor.GOLD);
     }
 
-    public Component authPromptLogin() {
-        return key("auth.prompt.login", NamedTextColor.YELLOW);
-    }
-
-    public Component authPromptRegister() {
-        return key("auth.prompt.register", NamedTextColor.YELLOW);
-    }
-
     public Component authPromptGeneric() {
         return key("auth.prompt.generic", NamedTextColor.YELLOW);
     }
