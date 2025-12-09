@@ -123,7 +123,7 @@ public class VeloAuth {
      */
     @Subscribe
     public void onProxyInitialize(ProxyInitializeEvent event) {
-        logger.info("=== VeloAuth v{} - Initialization ===", getVersion());
+        logger.info("Loading VeloAuth v{}...", getVersion());
 
         // Conditional logging to avoid unnecessary string concatenation
         if (logger.isDebugEnabled()) {
@@ -134,11 +134,15 @@ public class VeloAuth {
 
         // CRITICAL: Register early PreLogin blocker BEFORE starting async initialization
         // This prevents players from connecting before authentication handlers are ready
-        logger.info("Registering early PreLogin blocker for initialization protection...");
+        if (logger.isDebugEnabled()) {
+            logger.debug("Registering early PreLogin blocker for initialization protection...");
+        }
         try {
             EarlyLoginBlocker earlyBlocker = new EarlyLoginBlocker(this);
             server.getEventManager().register(this, earlyBlocker);
-            logger.info("✅ EarlyLoginBlocker registered BEFORE initialization - PreLogin protection active");
+            if (logger.isDebugEnabled()) {
+                logger.debug("✅ EarlyLoginBlocker registered BEFORE initialization - PreLogin protection active");
+            }
         } catch (Exception e) {
             logger.error("Failed to register early PreLogin blocker", e);
             return;
@@ -147,8 +151,6 @@ public class VeloAuth {
         // Inicjalizacja asynchroniczna z Virtual Threads
         // skipcq: JAVA-W1087 - Future is properly handled with whenComplete
         long initializationStartTime = System.currentTimeMillis();
-        logger.info("🚀 Starting VeloAuth initialization at {} (initialized flag: {})", 
-                new java.util.Date(initializationStartTime), initialized);
         
         CompletableFuture.runAsync(this::initializePlugin, VirtualThreadExecutorProvider.getVirtualExecutor())
                 .whenComplete((result, throwable) -> {
@@ -163,23 +165,18 @@ public class VeloAuth {
                         // Clear any stale cache entries from previous server runs
                         if (databaseManager != null) {
                             databaseManager.clearCache();
-                            logger.debug("Cleared stale database cache entries");
                         }
                         if (authCache != null) {
                             authCache.clearAll();
-                            logger.debug("Cleared stale authentication cache entries");
                         }
 
                         // Initialize bStats metrics
                         metricsFactory.make(this, BSTATS_PLUGIN_ID);
-                        logger.info("📊 bStats metrics initialized (Plugin ID: {})", BSTATS_PLUGIN_ID);
 
                         // CRITICAL: Set initialized flag to TRUE only after ALL components are ready
                         initialized = true;
-                        logger.info("✅ VeloAuth initialization completed successfully in {} ms", initializationDuration);
-                        logger.info("🟢 Initialization flag set to TRUE - player connections now allowed");
-                        logger.info(messages.get("plugin.initialization.ready"));
-                        logStartupInfo();
+                        
+                        logStartupInfo(initializationDuration);
                     }
                 });
     }
@@ -242,7 +239,9 @@ public class VeloAuth {
     }
 
     private void initializeConfiguration() {
-        logger.info("📋 [1/8] Loading configuration...");
+        if (logger.isDebugEnabled()) {
+            logger.debug("📋 [1/8] Loading configuration...");
+        }
         long startTime = System.currentTimeMillis();
         
         settings = new Settings(dataDirectory);
@@ -250,30 +249,40 @@ public class VeloAuth {
             throw VeloAuthException.configuration("settings loading", null);
         }
         
-        logger.info("✅ Configuration loaded in {} ms", System.currentTimeMillis() - startTime);
+        if (logger.isDebugEnabled()) {
+            logger.debug("✅ Configuration loaded in {} ms", System.currentTimeMillis() - startTime);
+        }
     }
 
     private void initializeMessages() {
-        logger.info("💬 [2/8] Initializing message system...");
+        if (logger.isDebugEnabled()) {
+            logger.debug("💬 [2/8] Initializing message system...");
+        }
         long startTime = System.currentTimeMillis();
         
         String language = settings.getLanguage();
         
         try {
             messages = new Messages(dataDirectory, language);
-            logger.info("✅ Message system initialized in {} ms (Language: {}, External files: enabled)", 
-                    System.currentTimeMillis() - startTime, language);
+            if (logger.isDebugEnabled()) {
+                logger.debug("✅ Message system initialized in {} ms (Language: {}, External files: enabled)", 
+                        System.currentTimeMillis() - startTime, language);
+            }
         } catch (Exception e) {
             logger.error("Failed to initialize external language files, falling back to JAR-embedded files", e);
             messages = new Messages();
             messages.setLanguage(language);
-            logger.info("✅ Message system initialized in {} ms (Language: {}, External files: disabled)", 
-                    System.currentTimeMillis() - startTime, language);
+            if (logger.isDebugEnabled()) {
+                logger.debug("✅ Message system initialized in {} ms (Language: {}, External files: disabled)", 
+                        System.currentTimeMillis() - startTime, language);
+            }
         }
     }
 
     private void initializeDatabase() {
-        logger.info("🗄️ [3/8] Initializing database connection...");
+        if (logger.isDebugEnabled()) {
+            logger.debug("🗄️ [3/8] Initializing database connection...");
+        }
         long startTime = System.currentTimeMillis();
         
         DatabaseConfig dbConfig = createDatabaseConfig();
@@ -284,12 +293,16 @@ public class VeloAuth {
             throw VeloAuthException.database("initialization", null);
         }
         
-        logger.info("✅ Database initialized in {} ms (Type: {})", 
-                System.currentTimeMillis() - startTime, settings.getDatabaseStorageType());
+        if (logger.isDebugEnabled()) {
+            logger.debug("✅ Database initialized in {} ms (Type: {})", 
+                    System.currentTimeMillis() - startTime, settings.getDatabaseStorageType());
+        }
     }
 
     private void initializeCache() {
-        logger.info("💾 [4/8] Initializing authentication cache...");
+        if (logger.isDebugEnabled()) {
+            logger.debug("💾 [4/8] Initializing authentication cache...");
+        }
         long startTime = System.currentTimeMillis();
         
         authCache = new AuthCache(
@@ -317,7 +330,9 @@ public class VeloAuth {
     }
 
     private void initializeCommands() {
-        logger.info("⌨️ [5/8] Registering commands...");
+        if (logger.isDebugEnabled()) {
+            logger.debug("⌨️ [5/8] Registering commands...");
+        }
         long startTime = System.currentTimeMillis();
         
         commandHandler = new CommandHandler(this, databaseManager, authCache, settings, messages);
@@ -327,7 +342,9 @@ public class VeloAuth {
     }
 
     private void initializeConnectionManager() {
-        logger.info("🔌 [6/8] Initializing connection manager...");
+        if (logger.isDebugEnabled()) {
+            logger.debug("🔌 [6/8] Initializing connection manager...");
+        }
         long startTime = System.currentTimeMillis();
         
         connectionManager = new ConnectionManager(this, databaseManager, authCache, settings, messages);
@@ -336,7 +353,9 @@ public class VeloAuth {
     }
 
     private void initializePremiumResolver() {
-        logger.info("👑 [7/8] Initializing premium resolver service...");
+        if (logger.isDebugEnabled()) {
+            logger.debug("👑 [7/8] Initializing premium resolver service...");
+        }
         long startTime = System.currentTimeMillis();
         
         premiumResolverService = new PremiumResolverService(logger, settings, databaseManager.getPremiumUuidDao());
@@ -347,7 +366,9 @@ public class VeloAuth {
     }
 
     private void initializeListeners() {
-        logger.info("🎧 [8/8] Registering event listeners...");
+        if (logger.isDebugEnabled()) {
+            logger.debug("🎧 [8/8] Registering event listeners...");
+        }
         long startTime = System.currentTimeMillis();
         
         // CRITICAL: Create handlers BEFORE AuthListener
@@ -470,33 +491,17 @@ public class VeloAuth {
         }
     }
 
-    /**
-     * Loguje informacje o starcie pluginu.
-     */
-    private void logStartupInfo() {
+    private void logStartupInfo(long initializationDuration) {
         if (logger.isInfoEnabled()) {
-            logger.info(messages.get("config.display.header"));
+            logger.info("PicoLimbo server '{}' found at default configuration", settings.getPicoLimboServerName());
             
-            String dbStatus = databaseManager.isConnected() ? messages.get("database.connected") : messages.get("database.disconnected");
-            String premiumStatus = settings.isPremiumCheckEnabled() ? messages.get("premium.check_enabled") : messages.get("premium.check_disabled");
-            var stats = authCache.getStats();
+            String dbType = settings.getDatabaseStorageType();
+            String language = settings.getLanguage();
+            // boolean bStats = true; // bStats jest zawsze inicjalizowane
             
-            logger.info(messages.get("config.display.database"),
-                    settings.getDatabaseStorageType(),
-                    dbStatus);
-            logger.info(messages.get("config.display.cache_ttl"), settings.getCacheTtlMinutes());
-            logger.info(messages.get("config.display.cache_max_size"), settings.getCacheMaxSize());
-            logger.info(messages.get("config.display.brute_force"),
-                    settings.getBruteForceMaxAttempts(),
-                    settings.getBruteForceTimeoutMinutes());
-            logger.info(messages.get("config.display.picolimbo_server"), settings.getPicoLimboServerName());
-            logger.info(messages.get("config.display.bcrypt_cost"), settings.getBcryptCost());
-            logger.info(messages.get("config.display.premium_check"), premiumStatus);
-            
-            logger.info(messages.get("config.display.cache_stats"),
-                    stats.authorizedPlayersCount(),
-                    stats.bruteForceEntriesCount(),
-                    stats.premiumCacheCount());
+            logger.info("Initialized in {} ms ({} database, {} language, bStats enabled)", 
+                    initializationDuration, dbType, language);
+            logger.info("Ready - player connections allowed");
         }
     }
 
@@ -521,7 +526,7 @@ public class VeloAuth {
                 if (logger.isInfoEnabled()) {
                     logger.info(messages.get("config.reloaded_success"));
                 }
-                logStartupInfo();
+                logStartupInfo(0); // Pass 0 as duration for reload
                 return languageReloaded; // Return true only if both succeeded
             } else {
                 if (logger.isErrorEnabled()) {

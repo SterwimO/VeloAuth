@@ -22,6 +22,9 @@ public final class LanguageFileManager {
     private static final String ENGLISH_FILE = "messages_en.properties";
     private static final String MESSAGES_PREFIX = "messages_";
     private static final String PROPERTIES_SUFFIX = ".properties";
+    // Internal resource path within the JAR, not an external URI
+    @SuppressWarnings("java:S1075")
+    private static final String LANG_RESOURCE_PATH = "/lang/";
     
     private final Path langDirectory;
     
@@ -66,7 +69,7 @@ public final class LanguageFileManager {
      */
     private boolean existsInJar(String language) {
         String filename = MESSAGES_PREFIX + language + PROPERTIES_SUFFIX;
-        try (InputStream is = getClass().getResourceAsStream("/lang/" + filename)) {
+        try (InputStream is = getClass().getResourceAsStream(LANG_RESOURCE_PATH + filename)) {
             return is != null;
         } catch (IOException e) {
             return false;
@@ -98,13 +101,13 @@ public final class LanguageFileManager {
      * Copies a language file from JAR to target path.
      */
     private void copyFromJar(String filename, Path targetFile) throws IOException {
-        try (InputStream is = getClass().getResourceAsStream("/lang/" + filename)) {
+        try (InputStream is = getClass().getResourceAsStream(LANG_RESOURCE_PATH + filename)) {
             if (is == null) {
                 logger.error("Default language file not found in JAR: {}", filename);
                 return;
             }
             Files.copy(is, targetFile);
-            logger.info("Copied default language file: {}", filename);
+            logger.debug("Copied default language file: {}", filename);
         }
     }
     
@@ -118,7 +121,7 @@ public final class LanguageFileManager {
      * @throws IOException if merge fails
      */
     private void mergeLanguageFile(String filename, Path targetFile) throws IOException {
-        try (InputStream jarStream = getClass().getResourceAsStream("/lang/" + filename)) {
+        try (InputStream jarStream = getClass().getResourceAsStream(LANG_RESOURCE_PATH + filename)) {
             if (jarStream == null) {
                 logger.warn("Cannot merge - JAR language file not found: {}", filename);
                 return;
@@ -186,15 +189,15 @@ public final class LanguageFileManager {
             // Check if language exists in JAR (built-in language)
             if (existsInJar(language)) {
                 // Copy built-in language from JAR
-                logger.info("Copying built-in language file '{}' from JAR", language);
+                logger.debug("Copying built-in language file '{}' from JAR", language);
                 copyFromJar(filename, languageFile);
             } else {
                 // Create new file from English template for custom languages
-                logger.info("Creating new language file for '{}' from English template", language);
+                logger.debug("Creating new language file for '{}' from English template", language);
                 createCustomLanguageFile(language);
             }
         } else {
-            logger.info("Language file already exists, using: {}", languageFile.getFileName());
+            logger.debug("Language file already exists, using: {}", languageFile.getFileName());
         }
         
         if (!Files.exists(languageFile)) {
@@ -214,7 +217,10 @@ public final class LanguageFileManager {
         try (InputStream is = Files.newInputStream(languageFile);
              InputStreamReader reader = new InputStreamReader(is, StandardCharsets.UTF_8)) {
             PropertyResourceBundle bundle = new PropertyResourceBundle(reader);
-            logger.info("Loaded EXTERNAL language file: {} ({} keys)", languageFile.toAbsolutePath(), bundle.keySet().size());
+            // Zredukowane logowanie do INFO z podsumowaniem, DEBUG dla szczegółów
+            if (logger.isDebugEnabled()) {
+                logger.debug("Loaded EXTERNAL language file: {} ({} keys)", languageFile.toAbsolutePath(), bundle.keySet().size());
+            }
             return bundle;
         }
     }

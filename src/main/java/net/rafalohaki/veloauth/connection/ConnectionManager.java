@@ -488,27 +488,24 @@ public class ConnectionManager {
             logger.debug("Velocity try servers: {}", tryServers);
         }
         
-        // Iteruj przez try servers w kolejności z konfiguracji Velocity
-        for (String serverName : tryServers) {
-            // Pomiń PicoLimbo - to jest serwer auth, nie docelowy
-            if (serverName.equals(picoLimboName)) {
-                logger.debug("Pomijam PicoLimbo server: {}", serverName);
-                continue;
-            }
-            
+    // Iteruj przez try servers w kolejności z konfiguracji Velocity
+    for (String serverName : tryServers) {
+        // Pomiń PicoLimbo - to jest serwer auth, nie docelowy
+        if (!serverName.equals(picoLimboName)) {
             Optional<RegisteredServer> server = plugin.getServer().getServer(serverName);
-            if (server.isEmpty()) {
+            if (server.isPresent()) {
+                RegisteredServer registeredServer = server.get();
+                // Sprawdź czy serwer jest dostępny (ping)
+                if (isServerAvailable(registeredServer, serverName)) {
+                    return Optional.of(registeredServer);
+                }
+            } else {
                 logger.debug("Serwer {} z try nie jest zarejestrowany", serverName);
-                continue;
             }
-            
-            RegisteredServer registeredServer = server.get();
-            
-            // Sprawdź czy serwer jest dostępny (ping)
-            if (isServerAvailable(registeredServer, serverName)) {
-                return Optional.of(registeredServer);
-            }
+        } else {
+            logger.debug("Pomijam PicoLimbo server: {}", serverName);
         }
+    }
         
         // Fallback: jeśli żaden try server nie jest dostępny, spróbuj dowolny inny
         logger.warn("Żaden serwer z try nie jest dostępny, próbuję fallback...");
@@ -599,13 +596,13 @@ public class ConnectionManager {
     public void debugServers() {
         if (logger.isDebugEnabled()) {
             logger.debug(messages.get("connection.servers.available"));
-        }
-        plugin.getServer().getAllServers().forEach(server -> {
-            String name = server.getServerInfo().getName();
-            String address = server.getServerInfo().getAddress().toString();
-            logger.debug("  - {} ({})", name, address);
-        });
-        if (logger.isDebugEnabled()) {
+            
+            plugin.getServer().getAllServers().forEach(server -> {
+                String name = server.getServerInfo().getName();
+                String address = server.getServerInfo().getAddress().toString();
+                logger.debug("  - {} ({})", name, address);
+            });
+            
             logger.debug(messages.get("connection.picolimbo.server"), settings.getPicoLimboServerName());
         }
 
@@ -619,8 +616,10 @@ public class ConnectionManager {
                     settings.getPicoLimboServerName());
             }
         } else {
-            if (logger.isInfoEnabled()) {
-                logger.info(messages.get("connection.picolimbo.found"),
+            // Zmieniono na DEBUG, aby uniknąć duplikowania informacji o PicoLimbo przy starcie
+            // Informacja o PicoLimbo jest już logowana w logStartupInfo w VeloAuth
+            if (logger.isDebugEnabled()) {
+                logger.debug(messages.get("connection.picolimbo.found"),
                         settings.getPicoLimboServerName(),
                         picoLimbo.get().getServerInfo().getAddress());
             }
