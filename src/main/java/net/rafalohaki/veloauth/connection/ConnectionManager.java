@@ -36,6 +36,7 @@ import java.util.concurrent.TimeUnit;
 public class ConnectionManager {
 
     private static final Marker SECURITY_MARKER = MarkerFactory.getMarker("SECURITY");
+    private static final long CONNECT_TIMEOUT_SECONDS = 5;
 
     private final VeloAuth plugin;
     private final DatabaseManager databaseManager;
@@ -317,6 +318,7 @@ public class ConnectionManager {
         try {
             var result = player.createConnectionRequest(targetServer)
                     .connect()
+                    .orTimeout(CONNECT_TIMEOUT_SECONDS, TimeUnit.SECONDS)
                     .join();  // Czekaj na zakończenie transferu
 
             if (result.isSuccessful()) {
@@ -406,6 +408,7 @@ public class ConnectionManager {
             // Użyj .join() aby zablokować do czasu zakończenia transferu
             boolean transferSuccess = player.createConnectionRequest(targetServer)
                     .connect()
+                    .orTimeout(CONNECT_TIMEOUT_SECONDS, TimeUnit.SECONDS)
                     .join() // Czekaj na zakończenie transferu
                     .isSuccessful();
 
@@ -475,7 +478,7 @@ public class ConnectionManager {
             
             // Sprawdź czy serwer jest dostępny (ping)
             try {
-                if (registeredServer.ping().join() != null) {
+                if (registeredServer.ping().orTimeout(2, TimeUnit.SECONDS).join() != null) {
                     logger.debug("Znaleziono dostępny serwer z try: {}", serverName);
                     return Optional.of(registeredServer);
                 }

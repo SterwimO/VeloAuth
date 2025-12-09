@@ -85,8 +85,6 @@ class SimpleMessagesKeysTest {
             "connection.picolimbo.found",
             // Auth prompt messages
             "auth.header",
-            "auth.prompt.login",
-            "auth.prompt.register",
             "auth.prompt.generic",
             "auth.account_exists",
             "auth.first_time",

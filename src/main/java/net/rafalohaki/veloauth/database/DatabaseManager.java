@@ -372,7 +372,7 @@ public class DatabaseManager {
      * Sprawdza czy baza danych jest zdrowa (ostatni health check passed).
      */
     public boolean isHealthy() {
-        return connected; // Trust HikariCP connection management
+        return connected && wasLastHealthCheckPassed();
     }
 
     /**
