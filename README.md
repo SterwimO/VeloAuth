@@ -4,7 +4,9 @@
 
 # VeloAuth
 
-[![Modrinth](https://img.shields.io/badge/Modrinth-00AF5C?style=for-the-badge&logo=modrinth&logoColor=white)](https://modrinth.com/plugin/veloauth) [![Discord](https://img.shields.io/badge/Discord-5865F2?style=for-the-badge&logo=discord&logoColor=white)](https://discord.gg/e2RkPbc3ZR)
+[![Modrinth](https://img.shields.io/badge/Modrinth-00AF5C?style=for-the-badge&logo=modrinth&logoColor=white)](https://modrinth.com/plugin/veloauth) 
+[![Discord](https://img.shields.io/badge/Discord-5865F2?style=for-the-badge&logo=discord&logoColor=white)](https://discord.gg/e2RkPbc3ZR)
+[![SpigotMC](https://img.shields.io/badge/SpigotMC-VeloAuth-orange?style=for-the-badge&logo=spigotmc&logoColor=white)](https://www.spigotmc.org/resources/veloauth.130240/)
 [![License](https://img.shields.io/github/license/rafalohaki/veloauth?style=for-the-badge)](LICENSE)
 
 **Complete Velocity authentication plugin** with intelligent nickname protection, premium auto-login, and secure offline player management.
