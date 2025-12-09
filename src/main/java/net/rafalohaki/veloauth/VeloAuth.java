@@ -124,20 +124,39 @@ public class VeloAuth {
      */
     @Subscribe
     public void onProxyInitialize(ProxyInitializeEvent event) {
-        try {
-            logger.info("Loading VeloAuth v{}...", getVersion());
-        } catch (Throwable t) {
-            logger.error("Failed to retrieve version from BuildConstants", t);
-            logger.info("Loading VeloAuth (version unknown)...");
+        logVersion();
+        logEnvironment();
+
+        if (!registerEarlyLoginBlocker()) {
+            return;
         }
 
-        // Conditional logging to avoid unnecessary string concatenation
+        // Inicjalizacja asynchroniczna z Virtual Threads
+        // skipcq: JAVA-W1087 - Future is properly handled with whenComplete
+        long initializationStartTime = System.currentTimeMillis();
+        
+        CompletableFuture.runAsync(this::initializePlugin, VirtualThreadExecutorProvider.getVirtualExecutor())
+                .whenComplete((result, throwable) -> handleInitializationResult(throwable, initializationStartTime));
+    }
+
+    private void logVersion() {
+        try {
+            logger.info("Loading VeloAuth v{}...", getVersion());
+        } catch (Exception e) {
+            logger.error("Failed to retrieve version from BuildConstants", e);
+            logger.info("Loading VeloAuth (version unknown)...");
+        }
+    }
+
+    private void logEnvironment() {
         if (logger.isDebugEnabled()) {
             logger.debug("Java: {}, Virtual Threads: {}",
                     System.getProperty("java.version"),
                     Thread.currentThread().isVirtual() ? "Available" : "Unavailable");
         }
+    }
 
+    private boolean registerEarlyLoginBlocker() {
         // CRITICAL: Register early PreLogin blocker BEFORE starting async initialization
         // This prevents players from connecting before authentication handlers are ready
         if (logger.isDebugEnabled()) {
@@ -149,42 +168,42 @@ public class VeloAuth {
             if (logger.isDebugEnabled()) {
                 logger.debug("✅ EarlyLoginBlocker registered BEFORE initialization - PreLogin protection active");
             }
+            return true;
         } catch (Exception e) {
             logger.error("Failed to register early PreLogin blocker", e);
-            return;
+            return false;
+        }
+    }
+
+    private void handleInitializationResult(Throwable throwable, long startTime) {
+        long initializationDuration = System.currentTimeMillis() - startTime;
+        
+        if (throwable != null) {
+            logger.error("❌ VeloAuth initialization FAILED after {} ms", initializationDuration, throwable);
+            // CRITICAL: Keep initialized flag as FALSE to prevent connections to broken plugin
+            logger.warn("⚠️ Initialization flag remains FALSE - all player connections will be blocked");
+            shutdown();
+        } else {
+            finalizeInitialization(initializationDuration);
+        }
+    }
+
+    private void finalizeInitialization(long initializationDuration) {
+        // Clear any stale cache entries from previous server runs
+        if (databaseManager != null) {
+            databaseManager.clearCache();
+        }
+        if (authCache != null) {
+            authCache.clearAll();
         }
 
-        // Inicjalizacja asynchroniczna z Virtual Threads
-        // skipcq: JAVA-W1087 - Future is properly handled with whenComplete
-        long initializationStartTime = System.currentTimeMillis();
+        // Initialize bStats metrics
+        metricsFactory.make(this, BSTATS_PLUGIN_ID);
+
+        // CRITICAL: Set initialized flag to TRUE only after ALL components are ready
+        initialized = true;
         
-        CompletableFuture.runAsync(this::initializePlugin, VirtualThreadExecutorProvider.getVirtualExecutor())
-                .whenComplete((result, throwable) -> {
-                    long initializationDuration = System.currentTimeMillis() - initializationStartTime;
-                    
-                    if (throwable != null) {
-                        logger.error("❌ VeloAuth initialization FAILED after {} ms", initializationDuration, throwable);
-                        // CRITICAL: Keep initialized flag as FALSE to prevent connections to broken plugin
-                        logger.warn("⚠️ Initialization flag remains FALSE - all player connections will be blocked");
-                        shutdown();
-                    } else {
-                        // Clear any stale cache entries from previous server runs
-                        if (databaseManager != null) {
-                            databaseManager.clearCache();
-                        }
-                        if (authCache != null) {
-                            authCache.clearAll();
-                        }
-
-                        // Initialize bStats metrics
-                        metricsFactory.make(this, BSTATS_PLUGIN_ID);
-
-                        // CRITICAL: Set initialized flag to TRUE only after ALL components are ready
-                        initialized = true;
-                        
-                        logStartupInfo(initializationDuration);
-                    }
-                });
+        logStartupInfo(initializationDuration);
     }
 
     /**
@@ -208,9 +227,19 @@ public class VeloAuth {
     }
 
     /**
+     * Helper method to reduce cognitive complexity in error handling.
+     * Logs error if enabled and throws the specified exception.
+     */
+    private void logErrorAndRethrow(String message, Exception cause, RuntimeException toThrow) {
+        if (logger.isErrorEnabled()) {
+            logger.error(message, cause);
+        }
+        throw toThrow;
+    }
+
+    /**
      * Inicjalizuje wszystkie komponenty pluginu.
      */
-    @SuppressWarnings({"java:S2139", "java:S3776"}) // Exception handling + initialization complexity 10
     private void initializePlugin() {
         try {
             initializeConfiguration();
@@ -227,26 +256,14 @@ public class VeloAuth {
                 logger.debug(messages.get("plugin.initialization.components_ready"));
             }
 
-        } catch (IllegalStateException e) {
-            if (logger.isErrorEnabled()) {
-                logger.error("Critical state error during VeloAuth initialization", e);
-            }
-            throw VeloAuthException.configuration("plugin initialization", e);
-        } catch (IllegalArgumentException e) {
-            if (logger.isErrorEnabled()) {
-                logger.error("Critical argument error during VeloAuth initialization", e);
-            }
-            throw VeloAuthException.configuration("invalid arguments", e);
         } catch (VeloAuthException e) {
-            if (logger.isErrorEnabled()) {
-                logger.error("VeloAuth error during initialization", e);
-            }
-            throw e; // Re-throw our custom exceptions
+            logErrorAndRethrow("VeloAuth error during initialization", e, e);
+        } catch (IllegalStateException | IllegalArgumentException e) {
+            logErrorAndRethrow("Critical error during VeloAuth initialization", e, 
+                VeloAuthException.configuration("plugin initialization", e));
         } catch (Exception e) {
-            if (logger.isErrorEnabled()) {
-                logger.error("Unexpected error during VeloAuth initialization", e);
-            }
-            throw VeloAuthException.configuration("unexpected error", e);
+            logErrorAndRethrow("Unexpected error during VeloAuth initialization", e, 
+                VeloAuthException.configuration("unexpected error", e));
         }
     }
 
