@@ -53,7 +53,7 @@ VeloAuth is an **authorization manager for Velocity proxy** that handles player 
 Download from releases
 
 ### 2. Install on Velocity
-1. Copy `VeloAuth-1.0.0.jar` to `plugins/`
+1. Copy `VeloAuth-1.0.1.jar` to `plugins/`
 2. Start Velocity - `config.yml` will be created
 3. Configure database in `plugins/VeloAuth/config.yml`
 4. Restart Velocity
