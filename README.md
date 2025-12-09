@@ -1,114 +1,119 @@
 <p align="center">
-  <img src="https://cdn.modrinth.com/data/cached_images/a31eec688d48cffe2770bd961e5d134c71b8b662.png" alt="VeloAuth Logo">
+  <img src="https://cdn.modrinth.com/data/cached_images/a31eec688d48cffe2770bd961e5d134c71b8b662.png" alt="VeloAuth">
 </p>
 
 # VeloAuth
 
-[![Modrinth](https://img.shields.io/badge/Modrinth-00AF5C?style=for-the-badge&logo=modrinth&logoColor=white)](https://modrinth.com/plugin/veloauth) [![Discord](https://img.shields.io/badge/Discord-5865F2?style=for-the-badge&logo=discord&logoColor=white)](https://discord.gg/e2RkPbc3ZR)
+[![Modrinth](https://img.shields.io/modrinth/dt/veloauth?logo=modrinth&label=Modrinth&color=00AF5C)](https://modrinth.com/plugin/veloauth)
+[![Discord](https://img.shields.io/discord/e2RkPbc3ZR?logo=discord&label=Discord&color=5865F2)](https://discord.gg/e2RkPbc3ZR)
+[![License](https://img.shields.io/github/license/rafalohaki/veloauth)](LICENSE)
 
-**Simple, Fast, and Secure Authentication for Velocity Proxy.**  
-*Prosty, szybki i bezpieczny plugin do autoryzacji dla Velocity.*
+**Complete Velocity authentication plugin** with intelligent nickname protection, premium auto-login, and secure offline player management.
 
----
+## What is VeloAuth?
 
-## ❓ What is this? / Co to jest?
+VeloAuth is a comprehensive authentication system for Velocity proxy that handles all player authorization before they reach your backend servers. It works seamlessly with PicoLimbo to provide a smooth login experience while protecting nickname ownership through intelligent conflict resolution.
 
-VeloAuth is a plugin that protects your server. It forces players to **login** or **register** before they can play. It supports **Premium** (no login needed) and **Cracked** (login required) players automatically!
+## Key Features
 
-*VeloAuth to plugin, który chroni twój serwer. Wymusza na graczach **logowanie** lub **rejestrację** zanim zaczną grać. Obsługuje graczy **Premium** (bez logowania) i **Non-Premium** (z logowaniem) automatycznie!*
+- 🔒 **Intelligent Nickname Protection** - Premium nicknames are reserved unless already registered by cracked players
+- ⚡ **Premium Auto-Login** - Mojang account owners skip authentication automatically  
+- 🛡️ **Secure Offline Auth** - BCrypt password hashing with brute-force protection
+- 🚀 **High Performance** - Authorization cache with 24-hour premium status caching
+- 🔄 **Conflict Resolution** - Smart handling of premium/cracked nickname conflicts
+- 📊 **Admin Tools** - Complete conflict management with `/vauth conflicts`
+- 🗄️ **Multi-Database** - MySQL, PostgreSQL, H2, SQLite
+- 🌍 **7 Languages** - EN, PL, DE, FR, RU, TR, SI
+- 🔄 **LimboAuth Compatible** - Seamless migration from existing setups
 
----
+## Requirements
 
-## ✨ Features / Funkcje
+- **Java 21 or newer**
+- **Velocity proxy** (API 3.4.0+)
+- **PicoLimbo** or other limbo/lobby server
+- **Database**: MySQL, PostgreSQL, H2, or SQLite
 
-*   ✅ **Secure Passwords** - Uses BCrypt (very safe / bardzo bezpieczne).
-*   ✅ **Auto-Login** - Premium players join instantly (Gracze Premium wchodzą bez hasła).
-*   ✅ **No Lag** - Built on Java 21 Virtual Threads (0% lag).
-*   ✅ **Multi-Database** - MySQL, PostgreSQL, SQLite, H2.
-*   ✅ **Limbo Support** - Unlogged players stay in a safe "limbo" server (PicoLimbo).
-*   ✅ **Translations** - Available in 7 languages!
+## Quick Setup
 
----
+### Installation
 
-## 🌍 Supported Languages / Wspierane Języki
+1. Download VeloAuth from Modrinth
+2. Place the file in your Velocity `plugins/` folder
+3. Start Velocity - the plugin will create a `config.yml` file
+4. Stop Velocity and configure your database and limbo name in `plugins/VeloAuth/config.yml` 
+5. Restart Velocity
 
-We speak your language! / Mówimy w twoim języku!
+### Velocity Config
 
-| Flag | Language | Code |
-| :---: | :--- | :---: |
-| 🇺🇸 | English | `en` |
-| 🇵🇱 | Polish | `pl` |
-| 🇩🇪 | German | `de` |
-| 🇫🇷 | French | `fr` |
-| 🇷🇺 | Russian | `ru` |
-| 🇹🇷 | Turkish | `tr` |
-| 🇸🇮 | Slovenian | `si` |
+Configure your `velocity.toml` with PicoLimbo and backend servers:
 
----
-
-## 🚀 Installation (Easy Mode) / Instalacja
-
-### 1. Requirements / Wymagania
-*   **Java 21** or newer.
-*   **Velocity** Proxy Server.
-*   **PicoLimbo** (recommended for the lobby).
-
-### 2. Setup / Konfiguracja
-1.  **Download** `VeloAuth.jar`.
-2.  **Drop it** into your `plugins/` folder on Velocity.
-3.  **Start** the server.
-4.  **Edit** `plugins/VeloAuth/config.toml` if you need to change database (Default: H2 - works instantly).
-
-### 3. Velocity Config (`velocity.toml`)
-Make sure your servers are set up correctly.  
-*Upewnij się, że twoje serwery są dobrze ustawione.*
-
-```toml
+```
 [servers]
-lobby = "127.0.0.1:25566"    # PicoLimbo (Auth Server)
-survival = "127.0.0.1:25565" # Your Main Server
+lobby = "127.0.0.1:25566"  # PicoLimbo (auth server)
+survival = "127.0.0.1:25565"  # Backend server
 
-# Important! / Ważne!
-try = ["survival"] 
-# VeloAuth will send players to 'survival' AFTER they login.
-# VeloAuth wyśle graczy na 'survival' PO zalogowaniu.
+try = ["lobby", "survival"]  # Order matters for lobby redirect
 ```
 
----
+**Important:** The `try` configuration controls where authenticated players are redirected. VeloAuth automatically skips the PicoLimbo server and selects the first available backend server.
 
-## 📜 Commands / Komendy
+### Database Config
 
-| Command | Usage | Description |
-| :--- | :--- | :--- |
-| **/login** | `/login <pass>` | Login to the server. |
-| **/register** | `/register <pass> <pass>` | Create a new account. |
-| **/changepassword** | `/changepassword <old> <new>` | Change password. |
-| **/unregister** | `/unregister <player>` | (Admin) Delete player account. |
-| **/vauth reload** | `/vauth reload` | (Admin) Reload config. |
-| **/vauth conflicts** | `/vauth conflicts` | (Admin) Check name conflicts. |
+Supported: H2 (out-of-box), MySQL, PostgreSQL, SQLite
 
----
+## Player Commands
 
-## 🛠️ Configuration / Konfiguracja
+| Command | Description | Restrictions |
+|---------|-------------|--------------|
+| `/register <password> <confirm>` | Create new account | Cannot use premium nicknames |
+| `/login <password>` | Login to your account | Works for premium/cracked players |
+| `/changepassword <old> <new>` | Change your password | Must be logged in |
 
-Simple explanation of `config.toml`:
+## Admin Commands
 
-```yaml
-database:
-  storage-type: H2  # Options: MYSQL, POSTGRESQL, SQLITE, H2
-  # For MySQL fill out hostname, user, password below...
+| Command | Permission | Description |
+|---------|------------|-------------|
+| `/unregister <nickname>` | `veloauth.admin` | Remove player account (resolves conflicts) |
+| `/vauth reload` | `veloauth.admin` | Reload configuration |
+| `/vauth cache-reset [player]` | `veloauth.admin` | Clear authorization cache |
+| `/vauth stats` | `veloauth.admin` | Show plugin statistics |
+| `/vauth conflicts` | `veloauth.admin` | List nickname conflicts |
 
-cache:
-  ttl-minutes: 60   # How long to remember login (minutes)
-  premium-ttl-hours: 24 # How often to check Premium status
+## How It Works
 
-picolimbo:
-  server-name: lobby # Name of your limbo server in velocity.toml
-```
+### Authentication Flow
+1. **Player connects** to Velocity
+2. **VeloAuth checks** authorization cache
+3. If **not cached**, player is sent to **PicoLimbo**
+4. **Nickname protection** activates during registration
+5. Player types **/login** or **/register**
+6. **VeloAuth verifies** credentials with BCrypt
+7. Player is **redirected to backend server** via `try` configuration
 
----
+### Nickname Protection System
+- **Premium nicknames are reserved** unless already registered by cracked players
+- **Conflict resolution** when premium players use cracked-registered nicknames
+- **Admin tools** for managing nickname conflicts
+- **Automatic blocking** of cracked players trying premium nicknames
 
-## 🆘 Support
+## LimboAuth Migration
 
-Need help? Found a bug?  
-**Join Discord:** [https://discord.gg/e2RkPbc3ZR](https://discord.gg/e2RkPbc3ZR)
+VeloAuth is **100% compatible** with LimboAuth databases:
+
+1. Stop LimboAuth on your backend servers
+2. Install VeloAuth on Velocity
+3. Configure VeloAuth to use the same database as LimboAuth
+4. Start Velocity - all existing accounts will work automatically
+
+## Support
+
+Need help? Found a bug? Open an issue on GitHub or join our Discord server.
+
+
+## Contributing
+
+Contributions are welcome! Please open an issue or PR.
+
+## License
+
+
