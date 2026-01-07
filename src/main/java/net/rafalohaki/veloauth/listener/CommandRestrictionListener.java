@@ -32,7 +32,7 @@ public class CommandRestrictionListener {
         }
 
         // Si déjà authentifié → laisser passer
-        if (authCache.isPlayerAuthorized(player.getUniqueId(), player.getRemoteAddress().getAddress())) {
+        if (authCache.isPlayerAuthorized(player.getUniqueId(), PlayerAddressUtils.getPlayerIp(player))) {
             return;
         }
 
