@@ -1,4 +1,4 @@
-package net.rafalohaki.veloauth.command;
+package net.rafalohaki.veloauth.listener;
 
 import com.velocitypowered.api.event.Subscribe;
 import com.velocitypowered.api.event.command.CommandExecuteEvent;
