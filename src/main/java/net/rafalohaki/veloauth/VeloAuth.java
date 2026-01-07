@@ -21,9 +21,9 @@ import net.rafalohaki.veloauth.listener.AuthListener;
 import net.rafalohaki.veloauth.listener.EarlyLoginBlocker;
 import net.rafalohaki.veloauth.listener.PreLoginHandler;
 import net.rafalohaki.veloauth.listener.PostLoginHandler;
+import net.rafalohaki.veloauth.listener.CommandRestrictionListener;
 import net.rafalohaki.veloauth.premium.PremiumResolverService;
 import net.rafalohaki.veloauth.util.VirtualThreadExecutorProvider;
-import net.rafalohaki.veloauth.listener.CommandRestrictionListener;
 import org.bstats.velocity.Metrics;
 import org.slf4j.Logger;
 
