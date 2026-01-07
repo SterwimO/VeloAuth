@@ -417,6 +417,7 @@ public class VeloAuth {
             preLoginHandler, postLoginHandler, databaseManager, messages);
         
         server.getEventManager().register(this, authListener);
+        server.getEventManager().register(this, new CommandRestrictionListener(this));
         logger.debug("✅ Event listeners registered in {} ms (PreLoginHandler + PostLoginHandler + AuthListener)", 
                 System.currentTimeMillis() - startTime);
     }
