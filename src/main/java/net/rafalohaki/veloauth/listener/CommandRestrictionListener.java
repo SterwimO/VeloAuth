@@ -45,7 +45,7 @@ public class CommandRestrictionListener {
             return;
         }
 
-        String raw = event.getCommand().trim().toLowerCase();
+        raw = event.getCommand().trim().toLowerCase();
 
         // Autoriser /login <arg>
         if (raw.startsWith("login ")) {
