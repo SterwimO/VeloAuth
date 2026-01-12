@@ -28,8 +28,16 @@ public class CommandRestrictionListener {
         if (player.getCurrentServer().isEmpty()) return;
 
         String server = player.getCurrentServer().get().getServerInfo().getName();
+        String raw = event.getCommand().trim().toLowerCase();
+
+        // Désactiver /login et /register sur tous les serveurs sauf "auth"
         if (!server.equalsIgnoreCase("auth")) {
-            return; // pas sur auth → ne rien bloquer
+            if (raw.startsWith("login ") || raw.startsWith("register ")) {
+                event.setResult(CommandExecuteEvent.CommandResult.denied());
+                player.sendMessage(Component.text("§cLes commandes /login et /register sont uniquement disponibles sur le serveur d'authentification."));
+                return;
+            }
+            return; // pas sur auth et pas login/register → ne rien bloquer
         }
 
         // Si déjà authentifié → laisser passer
